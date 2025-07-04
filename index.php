@@ -1,596 +1,126 @@
 <?php
-require_once __DIR__ . '/src/Database.php';
-require_once __DIR__ . '/src/Company.php';
+// Debug version - shows exact errors
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
 
-// Handle manual monitoring run
-$monitorResults = null;
-$monitorError = null;
+echo "Starting debug...<br>";
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Test each file one by one
+echo "1. Testing Database.php...<br>";
+try {
+    require_once __DIR__ . '/src/Database.php';
+    echo "✓ Database.php loaded successfully<br>";
+} catch (Exception $e) {
+    die("❌ Error loading Database.php: " . $e->getMessage());
+}
+
+echo "2. Testing Company.php...<br>";
+try {
+    require_once __DIR__ . '/src/Company.php';
+    echo "✓ Company.php loaded successfully<br>";
+} catch (Exception $e) {
+    die("❌ Error loading Company.php: " . $e->getMessage());
+}
+
+echo "3. Testing config file...<br>";
+if (!file_exists(__DIR__ . '/config/config.php')) {
+    die("❌ Config file missing! Create config/config.php from config.example.php");
+}
+echo "✓ Config file exists<br>";
+
+echo "4. Testing database connection...<br>";
+try {
     $db = new Database();
+    echo "✓ Database connection successful<br>";
+} catch (Exception $e) {
+    die("❌ Database connection failed: " . $e->getMessage());
+}
+
+echo "5. Testing table creation...<br>";
+try {
+    $db->createTables();
+    echo "✓ Tables created/verified<br>";
+} catch (Exception $e) {
+    die("❌ Table creation failed: " . $e->getMessage());
+}
+
+echo "6. Testing Company class...<br>";
+try {
     $company = new Company($db);
+    $companies = $company->getAll();
+    echo "✓ Company class working, found " . count($companies) . " companies<br>";
+} catch (Exception $e) {
+    die("❌ Company class failed: " . $e->getMessage());
+}
 
-    if (isset($_POST['action'])) {
-        switch ($_POST['action']) {
-            case 'add':
-                $company->add($_POST['name'], $_POST['careers_url'], $_POST['selector']);
-                header('Location: index.php');
-                exit;
+echo "7. Testing other required files...<br>";
+$requiredFiles = [
+    'src/JobScraper.php',
+    'src/Emailer.php',
+    'src/JobMonitor.php'
+];
 
-            case 'delete':
-                $company->delete($_POST['id']);
-                header('Location: index.php');
-                exit;
-
-            case 'run_monitor':
-                try {
-                    // Include required files
-                    require_once __DIR__ . '/src/JobScraper.php';
-                    require_once __DIR__ . '/src/Emailer.php';
-                    require_once __DIR__ . '/src/JobMonitor.php';
-
-                    // Capture output
-                    ob_start();
-
-                    // Create and run monitor
-                    $monitor = new JobMonitor();
-                    $monitorResults = $monitor->runManual();
-
-                    $output = ob_get_clean();
-
-                } catch (Exception $e) {
-                    $monitorError = $e->getMessage();
-                    ob_end_clean();
-                }
-                break;
+foreach ($requiredFiles as $file) {
+    if (file_exists(__DIR__ . '/' . $file)) {
+        echo "✓ $file exists<br>";
+        try {
+            require_once __DIR__ . '/' . $file;
+            echo "✓ $file loaded successfully<br>";
+        } catch (Exception $e) {
+            echo "❌ Error loading $file: " . $e->getMessage() . "<br>";
         }
+    } else {
+        echo "❌ Missing file: $file<br>";
     }
 }
 
-$db = new Database();
-$db->createTables();
-$company = new Company($db);
-$companies = $company->getAll();
+echo "8. Testing JobMonitor class...<br>";
+try {
+    $monitor = new JobMonitor();
+    echo "✓ JobMonitor class created successfully<br>";
+
+    // Test if runManual method exists
+    if (method_exists($monitor, 'runManual')) {
+        echo "✓ runManual method exists<br>";
+    } else {
+        echo "❌ runManual method missing - JobMonitor.php not updated properly<br>";
+    }
+} catch (Exception $e) {
+    echo "❌ JobMonitor class failed: " . $e->getMessage() . "<br>";
+}
+
+echo "<br><strong>Debug complete!</strong><br>";
+echo "If you see this message, the basic functionality is working.<br>";
+echo "The 500 error might be caused by a specific action or form submission.<br>";
+
+// Simple form test
+if ($_POST) {
+    echo "<br><strong>POST data received:</strong><br>";
+    print_r($_POST);
+}
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Monitor Dashboard</title>
-
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-
-    <style>
-        .bg-gradient-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .card {
-            border: none;
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-            transition: box-shadow 0.15s ease-in-out;
-        }
-        .card:hover {
-            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-        }
-        .navbar-brand {
-            font-weight: 700;
-        }
-        .status-badge {
-            font-size: 0.75rem;
-        }
-        .table th {
-            border-top: none;
-            font-weight: 600;
-            color: #495057;
-            background-color: #f8f9fa;
-        }
-        .btn-sm {
-            font-size: 0.8rem;
-        }
-        .code-snippet {
-            background-color: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 0.375rem;
-            padding: 0.5rem;
-            font-family: 'Courier New', monospace;
-            font-size: 0.875rem;
-        }
-        .hero-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .feature-icon {
-            width: 3rem;
-            height: 3rem;
-            border-radius: 0.75rem;
-        }
-    </style>
+    <title>Debug Test</title>
 </head>
-<body class="bg-light">
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-gradient-primary shadow-sm">
-        <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="bi bi-search me-2"></i>
-                Job Monitor
-            </a>
-            <div class="navbar-nav ms-auto">
-                <span class="navbar-text">
-                    <i class="bi bi-building me-1"></i>
-                    <?= count($companies) ?> Companies Monitored
-                </span>
-            </div>
-        </div>
-    </nav>
+<body>
+    <h2>Debug Test Form</h2>
+    <form method="post">
+        <input type="hidden" name="action" value="test">
+        <button type="submit">Test POST</button>
+    </form>
 
-    <!-- Hero Section -->
-    <div class="hero-section py-5 mb-4">
-        <div class="container text-center">
-            <h1 class="display-4 fw-bold mb-3">
-                <i class="bi bi-radar me-3"></i>
-                Job Monitor Dashboard
-            </h1>
-            <p class="lead">Automatically track job openings from your favorite companies</p>
-        </div>
-    </div>
-
-    <div class="container pb-5">
-        <!-- Add Company Form -->
-        <div class="row mb-4">
-            <div class="col-lg-8 mx-auto">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-plus-circle me-2"></i>
-                            Add New Company
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <form method="post">
-                            <input type="hidden" name="action" value="add">
-
-                            <div class="mb-3">
-                                <label for="companyName" class="form-label fw-semibold">
-                                    <i class="bi bi-building me-1"></i>
-                                    Company Name
-                                </label>
-                                <input type="text" class="form-control" id="companyName" name="name" required
-                                       placeholder="Enter company name">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="careersUrl" class="form-label fw-semibold">
-                                    <i class="bi bi-link-45deg me-1"></i>
-                                    Careers Page URL
-                                </label>
-                                <input type="url" class="form-control" id="careersUrl" name="careers_url" required
-                                       placeholder="https://company.com/careers">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="cssSelector" class="form-label fw-semibold">
-                                    <i class="bi bi-code-slash me-1"></i>
-                                    CSS Selector (Optional)
-                                </label>
-                                <input type="text" class="form-control" id="cssSelector" name="selector"
-                                       placeholder="a[href*='job'], .job-listing a, etc.">
-                                <div class="form-text">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    Leave empty to auto-detect job links
-                                </div>
-                            </div>
-
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="bi bi-plus-lg me-2"></i>
-                                    Add Company
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Manual Monitor Run -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card shadow-sm border-warning">
-                    <div class="card-header bg-warning text-dark">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-play-circle me-2"></i>
-                                Manual Monitor Run
-                            </h5>
-                            <?php if (!empty($companies)): ?>
-                                <form method="post" style="display: inline;">
-                                    <input type="hidden" name="action" value="run_monitor">
-                                    <button type="submit" class="btn btn-dark btn-sm" id="runMonitorBtn">
-                                        <i class="bi bi-lightning-charge me-1"></i>
-                                        Run Now
-                                    </button>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <?php if (empty($companies)): ?>
-                            <div class="text-center py-3">
-                                <i class="bi bi-info-circle text-muted me-2"></i>
-                                <span class="text-muted">Add companies first to run manual monitoring</span>
-                            </div>
-                        <?php elseif ($monitorResults !== null): ?>
-                            <div class="alert alert-success" role="alert">
-                                <h6 class="alert-heading">
-                                    <i class="bi bi-check-circle me-2"></i>
-                                    Monitor Run Completed Successfully!
-                                </h6>
-                                <hr>
-                                <div class="row">
-                                    <div class="col-md-3">
-                                        <div class="text-center">
-                                            <div class="h4 text-primary mb-1"><?= $monitorResults['companies_checked'] ?></div>
-                                            <small class="text-muted">Companies Checked</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="text-center">
-                                            <div class="h4 text-success mb-1"><?= $monitorResults['total_new_jobs'] ?></div>
-                                            <small class="text-muted">New Jobs Found</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="text-center">
-                                            <div class="h4 text-info mb-1"><?= $monitorResults['emails_sent'] ?></div>
-                                            <small class="text-muted">Email Alerts Sent</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="text-center">
-                                            <div class="h4 text-warning mb-1"><?= $monitorResults['errors'] ?></div>
-                                            <small class="text-muted">Errors</small>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <?php if (!empty($monitorResults['details'])): ?>
-                                    <hr>
-                                    <h6>Details:</h6>
-                                    <div class="row">
-                                        <?php foreach ($monitorResults['details'] as $companyName => $result): ?>
-                                            <div class="col-md-6 mb-2">
-                                                <div class="p-2 bg-light rounded">
-                                                    <strong><?= htmlspecialchars($companyName) ?>:</strong>
-                                                    <?php if ($result['success']): ?>
-                                                        <span class="text-success">
-                                                            <i class="bi bi-check-lg me-1"></i>
-                                                            <?= $result['new_jobs'] ?> new jobs
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span class="text-danger">
-                                                            <i class="bi bi-x-lg me-1"></i>
-                                                            Failed: <?= htmlspecialchars($result['error']) ?>
-                                                        </span>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                <?php endif; ?>
-
-                                <div class="mt-3">
-                                    <small class="text-muted">
-                                        <i class="bi bi-clock me-1"></i>
-                                        Run completed at <?= date('M j, Y g:i:s A') ?>
-                                    </small>
-                                </div>
-                            </div>
-                        <?php elseif ($monitorError !== null): ?>
-                            <div class="alert alert-danger" role="alert">
-                                <h6 class="alert-heading">
-                                    <i class="bi bi-exclamation-triangle me-2"></i>
-                                    Monitor Run Failed
-                                </h6>
-                                <p class="mb-0">
-                                    <strong>Error:</strong> <?= htmlspecialchars($monitorError) ?>
-                                </p>
-                                <hr>
-                                <small class="mb-0">
-                                    <strong>Troubleshooting:</strong>
-                                    <ul class="mb-0 mt-2">
-                                        <li>Check your database configuration in <code>config/config.php</code></li>
-                                        <li>Ensure all required files are uploaded</li>
-                                        <li>Verify company URLs are accessible</li>
-                                    </ul>
-                                </small>
-                            </div>
-                        <?php else: ?>
-                            <div class="text-center py-3">
-                                <i class="bi bi-play-circle display-4 text-muted mb-3"></i>
-                                <p class="text-muted mb-2">Click "Run Now" to manually check all companies for new job postings</p>
-                                <small class="text-muted">This will perform the same check as the automated cron job</small>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Companies Table -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white border-bottom">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-buildings me-2"></i>
-                                Monitored Companies
-                            </h5>
-                            <?php if (!empty($companies)): ?>
-                                <span class="badge bg-secondary">
-                                    <?= count($companies) ?> total
-                                </span>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
-                        <?php if (empty($companies)): ?>
-                            <div class="text-center py-5">
-                                <i class="bi bi-inbox display-1 text-muted mb-3"></i>
-                                <h5 class="text-muted">No companies added yet</h5>
-                                <p class="text-muted">Start by adding your first company above</p>
-                            </div>
-                        <?php else: ?>
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">
-                                                <i class="bi bi-building me-1"></i>
-                                                Company
-                                            </th>
-                                            <th scope="col">
-                                                <i class="bi bi-link-45deg me-1"></i>
-                                                Careers URL
-                                            </th>
-                                            <th scope="col">
-                                                <i class="bi bi-code-slash me-1"></i>
-                                                Selector
-                                            </th>
-                                            <th scope="col">
-                                                <i class="bi bi-clock me-1"></i>
-                                                Last Checked
-                                            </th>
-                                            <th scope="col">
-                                                <i class="bi bi-activity me-1"></i>
-                                                Status
-                                            </th>
-                                            <th scope="col">
-                                                <i class="bi bi-gear me-1"></i>
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($companies as $comp): ?>
-                                        <tr>
-                                            <td class="fw-semibold">
-                                                <?= htmlspecialchars($comp['name']) ?>
-                                            </td>
-                                            <td>
-                                                <a href="<?= htmlspecialchars($comp['careers_url']) ?>"
-                                                   target="_blank" class="text-decoration-none">
-                                                    <i class="bi bi-box-arrow-up-right me-1"></i>
-                                                    View
-                                                </a>
-                                            </td>
-                                            <td>
-                                                <span class="code-snippet">
-                                                    <?= htmlspecialchars($comp['selector'] ?: 'auto-detect') ?>
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <?php if ($comp['last_checked']): ?>
-                                                    <span class="text-success">
-                                                        <i class="bi bi-check-circle me-1"></i>
-                                                        <?= date('M j, Y g:i A', strtotime($comp['last_checked'])) ?>
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="text-muted">
-                                                        <i class="bi bi-dash-circle me-1"></i>
-                                                        Never
-                                                    </span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
-                                                <?php if ($comp['status'] === 'active'): ?>
-                                                    <span class="badge bg-success status-badge">
-                                                        <i class="bi bi-play-fill me-1"></i>
-                                                        Active
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="badge bg-danger status-badge">
-                                                        <i class="bi bi-pause-fill me-1"></i>
-                                                        Inactive
-                                                    </span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
-                                                <form method="post" style="display: inline;"
-                                                      onsubmit="return confirm('Are you sure you want to delete this company?')">
-                                                    <input type="hidden" name="action" value="delete">
-                                                    <input type="hidden" name="id" value="<?= $comp['id'] ?>">
-                                                    <button type="submit" class="btn btn-outline-danger btn-sm">
-                                                        <i class="bi bi-trash3"></i>
-                                                    </button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Setup Instructions -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-gear-fill me-2"></i>
-                            Setup Instructions
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6 class="fw-bold text-primary">
-                                    <i class="bi bi-list-check me-1"></i>
-                                    Initial Setup
-                                </h6>
-                                <ol class="list-group list-group-numbered list-group-flush">
-                                    <li class="list-group-item border-0 px-0">
-                                        Copy <code>config/config.example.php</code> to <code>config/config.php</code>
-                                    </li>
-                                    <li class="list-group-item border-0 px-0">
-                                        Update database and email credentials in the config file
-                                    </li>
-                                    <li class="list-group-item border-0 px-0">
-                                        Add companies using the form above
-                                    </li>
-                                    <li class="list-group-item border-0 px-0">
-                                        Set up a cron job for automated monitoring
-                                    </li>
-                                </ol>
-                            </div>
-                            <div class="col-md-6">
-                                <h6 class="fw-bold text-success">
-                                    <i class="bi bi-terminal me-1"></i>
-                                    Quick Commands
-                                </h6>
-                                <div class="mb-3">
-                                    <small class="text-muted d-block mb-1">Cron job setup:</small>
-                                    <div class="code-snippet">
-                                        */30 * * * * php /path/to/scripts/monitor.php
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <small class="text-muted d-block mb-1">Test scraping:</small>
-                                    <div class="code-snippet">
-                                        Visit test.php for advanced testing
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Features Overview -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card shadow-sm border-0">
-                    <div class="card-body text-center">
-                        <h6 class="text-muted mb-4">Application Features</h6>
-                        <div class="row g-4">
-                            <div class="col-md-3">
-                                <div class="feature-icon bg-primary bg-opacity-10 text-primary mx-auto mb-3 d-flex align-items-center justify-content-center">
-                                    <i class="bi bi-building fs-4"></i>
-                                </div>
-                                <h6 class="fw-semibold">Company Management</h6>
-                                <small class="text-muted">Add and monitor multiple companies</small>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="feature-icon bg-success bg-opacity-10 text-success mx-auto mb-3 d-flex align-items-center justify-content-center">
-                                    <i class="bi bi-search fs-4"></i>
-                                </div>
-                                <h6 class="fw-semibold">Smart Scraping</h6>
-                                <small class="text-muted">Auto-detect or custom CSS selectors</small>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="feature-icon bg-warning bg-opacity-10 text-warning mx-auto mb-3 d-flex align-items-center justify-content-center">
-                                    <i class="bi bi-envelope fs-4"></i>
-                                </div>
-                                <h6 class="fw-semibold">Email Alerts</h6>
-                                <small class="text-muted">Get notified of new job postings</small>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="feature-icon bg-info bg-opacity-10 text-info mx-auto mb-3 d-flex align-items-center justify-content-center">
-                                    <i class="bi bi-clock fs-4"></i>
-                                </div>
-                                <h6 class="fw-semibold">Automated</h6>
-                                <small class="text-muted">Runs automatically via cron jobs</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="bg-dark text-white py-4 mt-5">
-        <div class="container text-center">
-            <p class="mb-1">&copy; 2024 Job Monitor. Built with Bootstrap & PHP.</p>
-            <small class="text-muted">
-                <i class="bi bi-github me-1"></i>
-                Open source job monitoring application
-            </small>
-        </div>
-    </footer>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Custom JS for enhanced UX -->
-    <script>
-        // Add loading state to add company form submission
-        document.querySelector('form[method="post"]:not([action])').addEventListener('submit', function(e) {
-            if (this.querySelector('input[name="action"][value="add"]')) {
-                const submitBtn = this.querySelector('button[type="submit"]');
-                submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Adding...';
-                submitBtn.disabled = true;
-            }
-        });
-
-        // Add loading state to manual monitor run
-        const runMonitorBtn = document.getElementById('runMonitorBtn');
-        if (runMonitorBtn) {
-            runMonitorBtn.closest('form').addEventListener('submit', function(e) {
-                runMonitorBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
-                runMonitorBtn.disabled = true;
-
-                // Show a progress indicator
-                const card = runMonitorBtn.closest('.card');
-                const cardBody = card.querySelector('.card-body');
-                cardBody.innerHTML = `
-                    <div class="text-center py-4">
-                        <div class="spinner-border text-primary mb-3" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="text-muted mb-0">Checking companies for new job postings...</p>
-                        <small class="text-muted">This may take a few moments</small>
-                    </div>
-                `;
-            });
-        }
-
-        // Auto-focus on company name field
-        const companyNameField = document.getElementById('companyName');
-        if (companyNameField) {
-            companyNameField.focus();
-        }
-    </script>
+    <h3>File Check:</h3>
+    <ul>
+        <li>Config file: <?= file_exists(__DIR__ . '/config/config.php') ? '✓ Exists' : '❌ Missing' ?></li>
+        <li>Database.php: <?= file_exists(__DIR__ . '/src/Database.php') ? '✓ Exists' : '❌ Missing' ?></li>
+        <li>Company.php: <?= file_exists(__DIR__ . '/src/Company.php') ? '✓ Exists' : '❌ Missing' ?></li>
+        <li>JobScraper.php: <?= file_exists(__DIR__ . '/src/JobScraper.php') ? '✓ Exists' : '❌ Missing' ?></li>
+        <li>Emailer.php: <?= file_exists(__DIR__ . '/src/Emailer.php') ? '✓ Exists' : '❌ Missing' ?></li>
+        <li>JobMonitor.php: <?= file_exists(__DIR__ . '/src/JobMonitor.php') ? '✓ Exists' : '❌ Missing' ?></li>
+    </ul>
 </body>
 </html>
