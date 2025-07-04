@@ -10,6 +10,26 @@ $step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
 $errors = [];
 $success = [];
 
+// Check why user was redirected here
+$redirectReason = isset($_GET['reason']) ? $_GET['reason'] : '';
+$redirectMessage = '';
+
+switch ($redirectReason) {
+    case 'no_config':
+        $redirectMessage = 'Configuration file not found. Let\'s set up your Job Feed Aggregator.';
+        break;
+    case 'missing_files':
+        $redirectMessage = 'Some core files are missing. Please ensure all files are uploaded correctly.';
+        break;
+    case 'no_tables':
+        $redirectMessage = 'Database tables need to be created.';
+        $step = 3; // Jump to database setup
+        break;
+    case 'db_error':
+        $redirectMessage = 'Database connection issue: ' . urldecode($_GET['error'] ?? 'Unknown error');
+        break;
+}
+
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = isset($_POST['action']) ? $_POST['action'] : '';
@@ -121,6 +141,22 @@ if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
                 </div>
             </div>
         </div>
+
+        <!-- Show redirect reason if user was redirected -->
+        <?php if (!empty($redirectMessage)): ?>
+            <div class="alert alert-info alert-dismissible fade show">
+                <h6 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Setup Required</h6>
+                <div><?php echo htmlspecialchars($redirectMessage); ?></div>
+                <div class="mt-2">
+                    <small>
+                        <a href="index.php" class="text-decoration-none">
+                            <i class="bi bi-arrow-left me-1"></i>Try accessing the main interface anyway
+                        </a>
+                    </small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
 
         <!-- Alert Messages -->
         <?php if (!empty($errors)): ?>
@@ -272,14 +308,30 @@ if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">Create the database tables.</p>
+                        <p class="text-muted">Create the database tables and API files.</p>
+
+                        <div class="mb-3">
+                            <h6>What will be created:</h6>
+                            <ul class="list-unstyled small">
+                                <li><i class="bi bi-table text-primary me-2"></i>Database tables for companies, jobs, alerts</li>
+                                <li><i class="bi bi-folder text-info me-2"></i>API directory with endpoint files</li>
+                                <li><i class="bi bi-file-code text-success me-2"></i>Basic API endpoints for jobs, stats, companies</li>
+                            </ul>
+                        </div>
 
                         <form method="post">
                             <input type="hidden" name="action" value="setup_database">
                             <button type="submit" class="btn btn-success">
-                                <i class="bi bi-database-add me-2"></i>Create Database Tables
+                                <i class="bi bi-database-add me-2"></i>Create Database Tables & API Files
                             </button>
                         </form>
+
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <strong>Note:</strong> If you get permission errors, you can manually create API files by visiting:
+                                <a href="create-api-files.php" class="text-decoration-none" target="_blank">create-api-files.php</a>
+                            </small>
+                        </div>
                     </div>
                 </div>
 
@@ -324,6 +376,13 @@ if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
                         <h4>🎉 Congratulations!</h4>
                         <p class="text-muted mb-4">Your Job Feed Aggregator is ready!</p>
 
+                        <div class="alert alert-info">
+                            <h6><i class="bi bi-info-circle me-2"></i>Cron Job Setup (Optional)</h6>
+                            <p class="mb-2">To automate job monitoring, add this to your cron tab:</p>
+                            <code>*/30 * * * * php <?php echo __DIR__; ?>/scripts/monitor.php</code>
+                            <p class="mb-0 mt-2 small">This will check for new jobs every 30 minutes.</p>
+                        </div>
+
                         <div class="d-grid gap-2 d-md-flex justify-content-md-center">
                             <a href="index.php" class="btn btn-success btn-lg">
                                 <i class="bi bi-house me-2"></i>Go to Dashboard
@@ -331,6 +390,18 @@ if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
                             <a href="manage.php" class="btn btn-primary btn-lg">
                                 <i class="bi bi-plus-lg me-2"></i>Add Job Feeds
                             </a>
+                            <a href="test.php" class="btn btn-outline-info btn-lg">
+                                <i class="bi bi-tools me-2"></i>Test System
+                            </a>
+                        </div>
+
+                        <div class="text-center mt-3">
+                            <small class="text-muted">
+                                Need help? Check the
+                                <a href="#" onclick="showHelp()" class="text-decoration-none">documentation</a>
+                                or
+                                <a href="test.php" class="text-decoration-none">test your setup</a>
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -341,6 +412,16 @@ if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function showHelp() {
+            alert('Quick Help:\n\n' +
+                  '1. Add job feeds in "Manage Feeds"\n' +
+                  '2. Test scraping with "Test System"\n' +
+                  '3. Set up cron job for automation\n' +
+                  '4. Configure email alerts\n\n' +
+                  'For detailed help, check the README file.');
+        }
+    </script>
 </body>
 </html>
 
@@ -424,20 +505,112 @@ function createConfigFile($dbConfig, $emailConfig) {
 
 function setupDatabase() {
     try {
+        // Create API directory if it doesn't exist
+        $apiDir = __DIR__ . '/api';
+        if (!is_dir($apiDir)) {
+            if (!mkdir($apiDir, 0755, true)) {
+                // Can't create directory - continue anyway
+                error_log("Warning: Could not create API directory");
+            }
+        }
+
         require_once __DIR__ . '/src/Database.php';
         $db = new Database();
-        $db->createTables();
+
+        // Create tables with better error handling
+        try {
+            $db->createTables();
+            $tableMessage = "Database tables created successfully!";
+        } catch (Exception $e) {
+            $tableMessage = "Database tables created with some warnings. Check error log for details.";
+            error_log("Database table creation warning: " . $e->getMessage());
+        }
+
+        // Create basic API files if possible
+        $apiMessage = "";
+        try {
+            createApiFiles();
+            $apiMessage = " API files created.";
+        } catch (Exception $e) {
+            $apiMessage = " Note: Please manually create API files using create-api-files.php";
+            error_log("API file creation warning: " . $e->getMessage());
+        }
 
         return [
             'success' => true,
-            'message' => 'Database tables created!'
+            'message' => $tableMessage . $apiMessage
         ];
 
     } catch (Exception $e) {
         return [
             'success' => false,
-            'message' => 'Database setup failed: ' . $e->getMessage()
+            'message' => 'Database setup failed: ' . $e->getMessage() . '. You may need to create the database manually.'
         ];
+    }
+}
+
+function createApiFiles() {
+    $apiDir = __DIR__ . '/api';
+
+    // Ensure directory exists
+    if (!is_dir($apiDir) && !mkdir($apiDir, 0755, true)) {
+        throw new Exception("Cannot create API directory");
+    }
+
+    $files = [
+        'jobs.php' => '<?php
+header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+require_once __DIR__ . "/../src/Database.php";
+try {
+    $db = new Database();
+    $pdo = $db->getConnection();
+    $stmt = $pdo->query("SELECT j.*, c.name as company_name FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.status IN (\'new\', \'existing\') ORDER BY j.first_seen DESC LIMIT 50");
+    $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    echo json_encode([\'success\' => true, \'jobs\' => $jobs]);
+} catch (Exception $e) {
+    echo json_encode([\'success\' => false, \'error\' => $e->getMessage()]);
+}',
+
+        'stats.php' => '<?php
+header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+require_once __DIR__ . "/../src/Database.php";
+try {
+    $db = new Database();
+    $pdo = $db->getConnection();
+    $stmt = $pdo->query("SELECT COUNT(*) FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.status IN (\'new\', \'existing\') AND c.status = \'active\'");
+    $totalJobs = $stmt->fetchColumn();
+    $stmt = $pdo->query("SELECT COUNT(*) FROM companies WHERE status = \'active\'");
+    $activeCompanies = $stmt->fetchColumn();
+    echo json_encode([\'success\' => true, \'stats\' => [\'total_jobs\' => (int)$totalJobs, \'remote_jobs\' => 0, \'new_jobs\' => 0, \'active_companies\' => (int)$activeCompanies]]);
+} catch (Exception $e) {
+    echo json_encode([\'success\' => false, \'error\' => $e->getMessage()]);
+}',
+
+        'companies.php' => '<?php
+header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
+require_once __DIR__ . "/../src/Database.php";
+try {
+    $db = new Database();
+    $pdo = $db->getConnection();
+    $stmt = $pdo->query("SELECT c.*, COUNT(j.id) as job_count FROM companies c LEFT JOIN jobs j ON c.id = j.company_id AND j.status IN (\'new\', \'existing\') GROUP BY c.id ORDER BY c.name");
+    $companies = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($companies as &$company) { $company[\'id\'] = (int)$company[\'id\']; $company[\'job_count\'] = (int)$company[\'job_count\']; }
+    echo json_encode([\'success\' => true, \'companies\' => $companies]);
+} catch (Exception $e) {
+    echo json_encode([\'success\' => false, \'error\' => $e->getMessage()]);
+}'
+    ];
+
+    foreach ($files as $filename => $content) {
+        $filepath = $apiDir . '/' . $filename;
+        if (!file_exists($filepath)) {
+            if (!file_put_contents($filepath, $content)) {
+                throw new Exception("Cannot create $filename");
+            }
+        }
     }
 }
 

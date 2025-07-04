@@ -21,7 +21,21 @@ echo "<style>
 
 echo "<div class='container'>";
 echo "<h1>🚀 Job Feed Aggregator Migration</h1>";
-echo "<p>This script will upgrade your existing Job Monitor to the new Job Feed Aggregator with enhanced features.</p>";
+
+// Check why user was redirected here
+$redirectReason = $_GET['reason'] ?? '';
+switch ($redirectReason) {
+    case 'upgrade_needed':
+        echo "<div class='alert alert-info'><i class='bi bi-info-circle me-2'></i><strong>Upgrade Required:</strong> Your existing Job Monitor needs to be upgraded to the new Job Feed Aggregator.</div>";
+        break;
+    case 'old_structure':
+        echo "<div class='alert alert-warning'><i class='bi bi-exclamation-triangle me-2'></i><strong>Database Update:</strong> Your database structure needs to be upgraded to support new features.</div>";
+        break;
+    default:
+        echo "<p>This script will upgrade your existing Job Monitor to the new Job Feed Aggregator with enhanced features.</p>";
+}
+
+echo "<p>Enhanced features include location filtering, remote job detection, smart categorization, and advanced analytics.</p>";
 
 try {
     $db = new Database();
