@@ -1,411 +1,390 @@
-# Job Monitor
+# Job Feed Aggregator
 
 ![PHP](https://img.shields.io/badge/PHP-7.4+-777BB4?style=flat&logo=php&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-5.7+-4479A1?style=flat&logo=mysql&logoColor=white)
 ![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-A PHP web application that automatically monitors company career pages for new job postings and sends email notifications when new positions are found.
+**Transform your job search with intelligent feed aggregation!**
 
-## 🚀 Features
+A powerful PHP-based system that automatically monitors multiple company career pages, extracts job listings with rich metadata, and provides advanced filtering capabilities. Perfect for job seekers, recruiters, and market researchers.
 
-- **🏢 Company Management** - Add and monitor multiple companies through a web interface
-- **🔍 Smart Scraping** - Auto-detects job listings or uses custom CSS selectors
-- **📧 Email Alerts** - Automatic notifications when new jobs are discovered
-- **📊 Job Tracking** - Monitors job status (new/existing/removed) and prevents duplicates
-- **⚡ Manual Run** - Instant monitoring with detailed results via web interface
-- **🧪 Testing Tools** - Built-in tools to test and debug job scraping
-- **📱 Responsive Design** - Modern Bootstrap interface that works on all devices
-- **⏰ Automated** - Runs via cron jobs for hands-off monitoring
+## 🚀 New Features (v2.0)
 
-## 📋 Requirements
+### 🎯 **Smart Job Detection**
+- **Location Intelligence** - Automatically extracts and normalizes job locations
+- **Remote Work Detection** - Identifies remote-friendly positions using AI patterns
+- **Job Type Classification** - Categorizes positions (full-time, part-time, contract, internship)
+- **Experience Level Detection** - Determines seniority (entry, mid, senior, executive)
+- **Department Recognition** - Sorts jobs by department (engineering, design, marketing, etc.)
+- **Salary Extraction** - Captures salary ranges when available
 
-- **PHP 7.4+** with extensions:
-  - PDO MySQL
-  - cURL
-  - DOM
-  - libxml
+### 🔍 **Advanced Filtering & Search**
+- **Multi-dimensional Filtering** - Location, remote status, job type, experience level, department
+- **Full-text Search** - Search across job titles and descriptions
+- **Company-specific Filtering** - Focus on specific companies or industries
+- **Real-time Results** - Instant filtering without page reloads
+- **Smart Sorting** - Sort by date, company, title, or relevance
+
+### 📧 **Intelligent Alert System**
+- **Targeted Job Alerts** - Custom alerts based on keywords, location, and preferences
+- **Smart Notifications** - Only get alerted about jobs that match your criteria
+- **Weekly Digests** - Summary emails with market trends and top opportunities
+- **Multiple Alert Types** - Company-specific, keyword-based, or location-based alerts
+
+### 📊 **Enhanced Analytics**
+- **Job Market Insights** - Track trends, popular locations, and in-demand skills
+- **Company Performance** - Monitor which companies are hiring most actively
+- **Department Breakdown** - See hiring patterns across different teams
+- **Growth Tracking** - Historical data on job posting volumes
+
+### 🏢 **Company Management**
+- **Industry Categorization** - Organize companies by sector
+- **Enhanced Scraping** - Support for location and description selectors
+- **Logo Integration** - Automatic logo detection and display
+- **Bulk Operations** - Manage multiple feeds efficiently
+
+## 📋 Quick Start
+
+### Option 1: Fresh Installation
+1. **Download** the Job Feed Aggregator files
+2. **Upload** to your web server
+3. **Visit** `your-domain.com/job-feed/setup.php`
+4. **Follow** the guided setup process
+
+### Option 2: Upgrade from Job Monitor
+1. **Backup** your existing database
+2. **Upload** the new files (keeping your config)
+3. **Visit** `your-domain.com/job-feed/migrate.php`
+4. **Follow** the migration wizard
+
+## 🛠️ Manual Installation
+
+### Requirements
+- **PHP 7.4+** with extensions: PDO MySQL, cURL, DOM, libxml
 - **MySQL 5.7+** or MariaDB 10.2+
 - **Web Server** (Apache/Nginx)
 - **Email Server** (SMTP access for notifications)
 
-## 📁 Installation
-
-### 1. Download and Upload Files
-
-```bash
-# Clone or download the repository
-git clone https://github.com/yourusername/job-monitor.git
-
-# Upload to your web server
-# Example structure:
-/public_html/job-monitor/
-├── index.php
-├── test.php
-├── config/
-│   ├── config.example.php
-│   └── config.php (create this)
-├── src/
-│   ├── Database.php
-│   ├── Company.php
-│   ├── JobScraper.php
-│   ├── Emailer.php
-│   └── JobMonitor.php
-└── scripts/
-    └── monitor.php
-```
-
-### 2. Create Database
-
-**Via cPanel:**
-1. Go to **MySQL Databases**
-2. Create database: `job_monitor`
-3. Create user with **ALL PRIVILEGES** on the database
-
-**Via Command Line:**
+### Step 1: Database Setup
 ```sql
-CREATE DATABASE job_monitor;
-CREATE USER 'job_user'@'localhost' IDENTIFIED BY 'your_password';
-GRANT ALL PRIVILEGES ON job_monitor.* TO 'job_user'@'localhost';
+CREATE DATABASE job_feed_aggregator;
+CREATE USER 'job_user'@'localhost' IDENTIFIED BY 'secure_password';
+GRANT ALL PRIVILEGES ON job_feed_aggregator.* TO 'job_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-### 3. Configure Application
-
+### Step 2: Configuration
 ```bash
-# Copy example config
+# Copy configuration template
 cp config/config.example.php config/config.php
 
 # Edit with your settings
 nano config/config.php
 ```
 
+### Step 3: File Structure
+```
+job-feed-aggregator/
+├── index.php              # Main dashboard
+├── manage.php              # Company management
+├── test.php               # Testing tools
+├── setup.php              # Installation wizard
+├── migrate.php            # Upgrade wizard
+├── config/
+│   ├── config.example.php
+│   └── config.php         # Your configuration
+├── src/
+│   ├── Database.php       # Enhanced database class
+│   ├── Company.php        # Company management
+│   ├── JobScraper.php     # Intelligent scraping engine
+│   ├── JobMonitor.php     # Monitoring system
+│   └── Emailer.php        # Alert system
+├── api/
+│   ├── jobs.php           # Jobs API endpoint
+│   ├── companies.php      # Companies API
+│   ├── stats.php          # Statistics API
+│   └── *.php              # Other API endpoints
+└── scripts/
+    └── monitor.php        # Cron job script
+```
+
 ## ⚙️ Configuration
 
 ### Database Configuration
-
-Edit `config/config.php`:
-
 ```php
-<?php
-return [
-    'database' => [
-        'host' => 'localhost',              // Database host
-        'name' => 'job_monitor',            // Database name
-        'user' => 'your_db_username',       // Database username
-        'pass' => 'your_db_password'        // Database password
-    ],
-    'email' => [
-        'host' => 'smtp.gmail.com',         // SMTP server
-        'port' => 587,                      // SMTP port
-        'user' => 'your_email@gmail.com',   // Your email
-        'pass' => 'your_app_password',      // Email password/app password
-        'to' => 'alerts@yourdomain.com'     // Where to send alerts
-    ]
-];
+'database' => [
+    'host' => 'localhost',
+    'name' => 'job_feed_aggregator',
+    'user' => 'job_user',
+    'pass' => 'secure_password'
+]
 ```
 
-### Email Setup Examples
-
-**Gmail:**
+### Email Configuration
 ```php
 'email' => [
     'host' => 'smtp.gmail.com',
     'port' => 587,
     'user' => 'your_email@gmail.com',
-    'pass' => 'your_app_password',    // Use App Password, not regular password
-    'to' => 'alerts@yourdomain.com'
+    'pass' => 'your_app_password',
+    'to' => 'alerts@yourdomain.com',
+    'alerts_enabled' => true,
+    'admin_notifications' => true,
+    'admin_email' => 'admin@yourdomain.com'
 ]
 ```
 
-**Yahoo:**
-```php
-'email' => [
-    'host' => 'smtp.mail.yahoo.com',
-    'port' => 587,
-    'user' => 'your_email@yahoo.com',
-    'pass' => 'your_password',
-    'to' => 'alerts@yourdomain.com'
-]
-```
+## 🎯 Usage Guide
 
-**Outlook/Hotmail:**
-```php
-'email' => [
-    'host' => 'smtp-mail.outlook.com',
-    'port' => 587,
-    'user' => 'your_email@outlook.com',
-    'pass' => 'your_password',
-    'to' => 'alerts@yourdomain.com'
-]
-```
+### Adding Company Feeds
+1. **Navigate** to Manage Feeds
+2. **Click** "Add New Feed"
+3. **Enter** company details:
+   - Company Name & Industry
+   - Careers page URL
+   - CSS selectors (optional)
+4. **Test** the configuration
+5. **Save** and activate
 
-## 🎯 Usage
-
-### Adding Companies
-
-1. **Access the web interface**: `https://yourdomain.com/job-monitor/`
-2. **Fill out the form**:
-   - **Company Name**: Any descriptive name
-   - **Careers URL**: Direct link to the company's job listings page
-   - **CSS Selector** (optional): Custom selector for better accuracy
-
-### CSS Selector Examples
-
-| Selector | Description | Use Case |
-|----------|-------------|----------|
-| `a[href*="job"]` | Links containing "job" | Generic job links |
-| `a[href*="career"]` | Links containing "career" | Career page links |
-| `.job-listing a` | Links inside job containers | Structured job boards |
-| `[data-job-id]` | Elements with job IDs | Modern job platforms |
-| `.posting-title a` | Job title links | Common class name |
-| `h3 a` | Links in heading tags | Job titles in headers |
-
-### Testing Job Scraping
-
-**Method 1: Built-in Tester**
-1. Visit `https://yourdomain.com/job-monitor/test.php`
-2. Enter any careers URL to test scraping
-3. View results and adjust CSS selectors as needed
-
-**Method 2: Manual Run**
-1. Add companies via the main interface
-2. Click the **"Run Now"** button
-3. View detailed results for each company
+### Advanced Selectors
+| Selector Type | Example | Purpose |
+|---------------|---------|---------|
+| Job Links | `a[href*="job"]` | Find job posting links |
+| Location | `.location, [data-location]` | Extract job locations |
+| Description | `.description, .job-summary` | Get job descriptions |
 
 ### Setting Up Automation
-
-**HostGator/cPanel:**
-1. Go to **cPanel → Cron Jobs**
-2. Set up with these settings:
-   ```
-   Minute: */30
-   Hour: *
-   Day: *
-   Month: *
-   Weekday: *
-   Command: /usr/local/bin/php /home/yourusername/public_html/job-monitor/scripts/monitor.php
-   ```
-
-**Common Schedules:**
 ```bash
-# Every 30 minutes
-*/30 * * * * php /path/to/scripts/monitor.php
+# Add to crontab for every 30 minutes
+*/30 * * * * php /path/to/job-feed/scripts/monitor.php
 
-# Every hour
-0 * * * * php /path/to/scripts/monitor.php
-
-# Twice daily (9 AM and 6 PM)
-0 9,18 * * * php /path/to/scripts/monitor.php
+# For hourly updates
+0 * * * * php /path/to/job-feed/scripts/monitor.php
 
 # Business hours only (9 AM - 5 PM, weekdays)
-0 9-17 * * 1-5 php /path/to/scripts/monitor.php
+0 9-17 * * 1-5 php /path/to/job-feed/scripts/monitor.php
 ```
 
-**Linux/macOS:**
+### Creating Job Alerts
+1. **Access** the job feed dashboard
+2. **Use filters** to define your criteria
+3. **Click** "Create Alert"
+4. **Enter** your email and preferences
+5. **Save** to start receiving notifications
+
+## 🔧 API Reference
+
+### Jobs Endpoint
 ```bash
-# Edit crontab
-crontab -e
-
-# Add line for every 30 minutes
-*/30 * * * * php /path/to/job-monitor/scripts/monitor.php
+GET /api/jobs.php?search=developer&location=remote&job_type=full-time
 ```
 
-## 🧪 Testing & Debugging
+**Parameters:**
+- `search` - Search term for title/description
+- `location` - Location filter
+- `remote_only` - Boolean for remote jobs only
+- `job_type` - Filter by job type
+- `experience` - Filter by experience level
+- `department` - Filter by department
+- `company_ids` - Comma-separated company IDs
+- `limit` - Results per page (max 100)
+- `offset` - Pagination offset
 
-### Debug Tool
-If experiencing issues, use the debug tool:
-```
-https://yourdomain.com/job-monitor/step-debug.php
-```
-
-### Manual Testing
+### Statistics Endpoint
 ```bash
-# Test monitor script directly
-php scripts/monitor.php
-
-# Test with debugging
-php -d display_errors=1 scripts/monitor.php
+GET /api/stats.php
 ```
 
-### Common Test URLs
-Use these to test your setup:
+**Response:**
+```json
+{
+  "success": true,
+  "stats": {
+    "total_jobs": 1250,
+    "remote_jobs": 340,
+    "new_jobs": 89,
+    "active_companies": 25,
+    "departments": [...],
+    "locations": [...]
+  }
+}
+```
 
-| Company | URL | Suggested Selector |
-|---------|-----|-------------------|
-| Netflix | `https://jobs.netflix.com/` | `a[href*="job"]` |
-| Shopify | `https://www.shopify.com/careers` | `.job-listing a` |
-| GitHub | `https://github.com/about/careers` | `[data-analytics-event*="job"]` |
-| Spotify | `https://www.lifeatspotify.com/jobs` | `.posting-title` |
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**500 Internal Server Error**
-- Check file permissions (644 for files, 755 for directories)
-- Verify all required files are uploaded
-- Check config/config.php exists and is valid
-- Review error logs in cPanel
-
-**Database Connection Failed**
-- Verify database credentials in config.php
-- Ensure database exists
-- Check user permissions
-- Test database connection manually
-
-**No Jobs Found**
-- Test with different CSS selectors
-- Check if website blocks scrapers
-- Verify the careers URL is correct
-- Some sites require JavaScript (not supported)
-
-**Email Not Sending**
-- Verify SMTP settings
-- Use app passwords for Gmail
-- Check spam folders
-- Test email settings manually
-
-**Cron Job Not Running**
-- Verify cron syntax
-- Check PHP path: `which php`
-- Ensure script has execute permissions
-- Check cron logs: `/var/log/cron`
-
-### File Permissions
+### Companies Endpoint
 ```bash
-# Set correct permissions
-chmod 644 *.php
-chmod 644 config/*.php
-chmod 644 src/*.php
-chmod 755 scripts/
-chmod 644 scripts/*.php
+GET /api/companies.php
 ```
 
-### Memory and Timeout Issues
-Add to your PHP configuration:
-```php
-ini_set('memory_limit', '256M');
-ini_set('max_execution_time', 300);
+## 🔍 Advanced Features
+
+### Custom CSS Selectors
+The system supports advanced CSS selectors for better data extraction:
+
+```javascript
+// Common patterns for job boards
+{
+  "lever.co": {
+    "jobs": "[data-qa='posting-name']",
+    "location": "[data-qa='posting-location']"
+  },
+  "greenhouse.io": {
+    "jobs": ".posting-title",
+    "location": ".location"
+  },
+  "workday.com": {
+    "jobs": "[data-automation-id='jobTitle']",
+    "location": "[data-automation-id='locations']"
+  }
+}
 ```
+
+### Job Classification
+The system automatically detects:
+
+- **Remote Work**: Keywords like "remote", "work from home", "distributed"
+- **Job Types**: Full-time, part-time, contract, internship patterns
+- **Experience Levels**: Junior, senior, lead, director indicators
+- **Departments**: Engineering, design, marketing, sales patterns
+- **Salary Information**: Various salary format patterns
+
+### Data Export
+Export job data in multiple formats:
+- **CSV Export** - All job data with filters applied
+- **JSON API** - Programmatic access to job data
+- **RSS Feeds** - Subscribe to job updates
 
 ## 📊 Database Schema
 
-The application creates these tables automatically:
+### Enhanced Tables
+- **companies** - Company information with industry categorization
+- **jobs** - Job listings with rich metadata
+- **job_tags** - Flexible job categorization system
+- **saved_jobs** - User-saved job listings
+- **job_alerts** - Email alert configurations
+- **tags** - Common skills and categories
+- **search_analytics** - Usage tracking and insights
 
-**companies**
-```sql
-CREATE TABLE companies (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    careers_url VARCHAR(500) NOT NULL,
-    selector VARCHAR(500) DEFAULT NULL,
-    last_checked DATETIME DEFAULT NULL,
-    status ENUM('active', 'inactive') DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+### Key Indexes
+- Full-text search on job titles and descriptions
+- Geographic indexes for location-based queries
+- Performance indexes for filtering and sorting
 
-**jobs**
-```sql
-CREATE TABLE jobs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    company_id INT,
-    title VARCHAR(500) NOT NULL,
-    url VARCHAR(500) DEFAULT NULL,
-    content_hash VARCHAR(64),
-    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('new', 'existing', 'removed') DEFAULT 'new',
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_job (company_id, content_hash)
-);
-```
+## 🔐 Security Considerations
 
-## 🎨 Customization
+- **Input Validation** - All user inputs are sanitized
+- **SQL Injection Prevention** - Prepared statements throughout
+- **Rate Limiting** - Respectful scraping with delays
+- **User Agent Rotation** - Avoid detection as bot
+- **Error Handling** - Graceful failure management
+- **Data Privacy** - Secure handling of email addresses
 
-### Changing Email Templates
-Edit `src/Emailer.php`:
+## 📈 Performance Optimization
+
+### Caching Strategy
+- **Database Views** - Pre-computed common queries
+- **Index Optimization** - Strategic database indexes
+- **Query Optimization** - Efficient SQL patterns
+- **Pagination** - Large result set handling
+
+### Monitoring
+- **Success Rates** - Track scraping success by company
+- **Response Times** - Monitor API performance
+- **Error Tracking** - Log and alert on failures
+- **Usage Analytics** - Track popular searches and filters
+
+## 🧪 Testing & Debugging
+
+### Built-in Test Tools
+- **URL Tester** - Test any careers page
+- **Selector Validator** - Verify CSS selectors
+- **Company Tester** - Test individual company configurations
+- **Bulk Tester** - Test all active companies
+
+### Debug Mode
+Enable detailed logging:
 ```php
-public function sendJobAlert($companyName, $newJobs) {
-    $subject = "🎯 New Jobs at $companyName";
-    $body = "Great news! New positions found:\n\n";
-    // Customize message format here
-}
+// In config.php
+'debug' => [
+    'enabled' => true,
+    'log_file' => 'debug.log',
+    'email_errors' => true
+]
 ```
 
-### Adding New Scrapers
-Extend `src/JobScraper.php` for site-specific logic:
-```php
-private function customScraper($url) {
-    // Add custom scraping logic for specific sites
-}
-```
+## 🆙 Migration from v1.0
 
-### Custom CSS Selectors by Domain
-```php
-private function getDefaultSelector($url) {
-    $domain = parse_url($url, PHP_URL_HOST);
+If you're upgrading from the original Job Monitor:
 
-    $selectors = [
-        'lever.co' => '[data-qa="posting-name"]',
-        'greenhouse.io' => '.posting-title',
-        'workday.com' => '[data-automation-id="jobTitle"]'
-    ];
+1. **Backup** your existing database
+2. **Run** the migration script: `migrate.php`
+3. **Review** upgraded company configurations
+4. **Test** enhanced scraping capabilities
+5. **Configure** new alert preferences
 
-    return $selectors[$domain] ?? 'a';
-}
-```
+The migration preserves:
+- ✅ All existing companies and job data
+- ✅ Company status and last checked timestamps
+- ✅ Historical job discovery data
 
-## 🔒 Security Considerations
-
-- **Keep config.php secure** - never commit database credentials
-- **Use HTTPS** for the web interface
-- **Validate input** - especially URLs and selectors
-- **Rate limiting** - respect target websites' resources
-- **User agents** - use appropriate User-Agent headers
-- **robots.txt** - respect website scraping policies
-
-## 📈 Performance Tips
-
-- **Optimize selectors** - specific selectors are faster
-- **Use delays** - don't overwhelm target servers
-- **Monitor resources** - watch for memory/CPU usage
-- **Log monitoring** - track success/failure rates
-- **Database maintenance** - clean old job records periodically
+New features added:
+- 🆕 Location and remote work detection
+- 🆕 Job type and experience level classification
+- 🆕 Department categorization
+- 🆕 Enhanced search and filtering
+- 🆕 Smart alert system
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Commit changes: `git commit -am 'Add feature'`
-4. Push to branch: `git push origin feature-name`
-5. Submit a pull request
+We welcome contributions! Here's how to help:
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature-name`
+3. **Make** your changes with tests
+4. **Commit** with clear messages: `git commit -am 'Add feature'`
+5. **Push** to your branch: `git push origin feature-name`
+6. **Submit** a pull request
+
+### Development Setup
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/job-feed-aggregator.git
+
+# Set up development environment
+cp config/config.example.php config/config.dev.php
+
+# Run tests
+php tests/run_tests.php
+```
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙋 Support
+## 🙋 Support & Community
 
-- **Issues**: Create an issue on GitHub
-- **Documentation**: Check this README
-- **Email**: your-email@domain.com
+- **📧 Email Support**: support@jobfeedaggregator.com
+- **📖 Documentation**: [docs.jobfeedaggregator.com](https://docs.jobfeedaggregator.com)
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/yourusername/job-feed-aggregator/issues)
+- **💬 Community Forum**: [community.jobfeedaggregator.com](https://community.jobfeedaggregator.com)
 
-## 🔄 Updates
+## 🔮 Roadmap
 
-### Version 1.1
-- Added Bootstrap interface
-- Manual run feature
-- Enhanced testing tools
-- Improved error handling
+### Upcoming Features
+- **🤖 AI-Powered Matching** - Machine learning job recommendations
+- **📱 Mobile App** - Native iOS and Android applications
+- **🔗 ATS Integration** - Connect with popular applicant tracking systems
+- **📊 Advanced Analytics** - Salary trends and market insights
+- **🌐 Multi-language Support** - International job market support
+- **🔔 Slack/Discord Integration** - Team notifications and alerts
 
-### Version 1.0
-- Initial release
-- Basic job monitoring
-- Email notifications
-- Cron job automation
+### Version History
+- **v2.0** - Smart filtering, enhanced scraping, alert system
+- **v1.1** - Bootstrap interface, manual run features
+- **v1.0** - Basic job monitoring and email notifications
 
 ---
 
-**⚠️ Legal Notice:** Always respect website terms of service and robots.txt files. This tool is for educational and legitimate job searching purposes only.
+**⚠️ Legal Notice:** Always respect website terms of service and robots.txt files. This tool is intended for legitimate job searching and market research purposes only. Users are responsible for ensuring compliance with applicable laws and website policies.
+
+**🚀 Ready to transform your job search?** [Get started with the setup wizard](setup.php) or [view the live demo](https://demo.jobfeedaggregator.com)!
