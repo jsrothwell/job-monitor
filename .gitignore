@@ -1,0 +1,89 @@
+# Job Monitor - PHP .gitignore
+
+# Configuration files (contains sensitive data)
+config/config.php
+.env
+.env.local
+.env.production
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+error.log
+access.log
+
+# Cache
+cache/
+tmp/
+temp/
+
+# Composer
+vendor/
+composer.phar
+composer.lock
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Operating System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# PHP specific
+*.php~
+*.phps
+*.phtml
+
+# Session files
+sessions/
+*.sess
+
+# Upload directories
+uploads/
+files/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Node modules (if using any frontend tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+build/
+dist/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# PHPUnit
+.phpunit.result.cache
+phpunit.xml
+
+# Email test files
+test-emails/
+
+# Development tools
+.php_cs.cache
+.phpmd.xml
