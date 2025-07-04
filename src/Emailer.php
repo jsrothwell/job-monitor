@@ -86,27 +86,27 @@ class Emailer {
             $body .= "🔹 {$job['title']}\n";
 
             if (!empty($job['location'])) {
-                $body .= "   📍 Location: {$job['location']}\n";
+                $body .= "    📍 Location: {$job['location']}\n";
             }
 
             if ($job['is_remote']) {
-                $body .= "   🏠 Remote Work Available\n";
+                $body .= "    🏠 Remote Work Available\n";
             }
 
             if (!empty($job['job_type']) && $job['job_type'] !== 'unknown') {
-                $body .= "   💼 Type: " . ucfirst($job['job_type']) . "\n";
+                $body .= "    💼 Type: " . ucfirst($job['job_type']) . "\n";
             }
 
             if (!empty($job['department'])) {
-                $body .= "   🏢 Department: " . ucfirst($job['department']) . "\n";
+                $body .= "    🏢 Department: " . ucfirst($job['department']) . "\n";
             }
 
             if (!empty($job['salary_range'])) {
-                $body .= "   💰 Salary: {$job['salary_range']}\n";
+                $body .= "    💰 Salary: {$job['salary_range']}\n";
             }
 
             if (!empty($job['url'])) {
-                $body .= "   🔗 Apply: {$job['url']}\n";
+                $body .= "    🔗 Apply: {$job['url']}\n";
             }
 
             $body .= "\n";
@@ -211,7 +211,7 @@ class Emailer {
         $body .= "• Total new jobs: {$stats['total_new_jobs']}\n";
         $body .= "• Remote positions: {$stats['remote_jobs']}\n";
         $body .= "• Active companies: {$stats['active_companies']}\n";
-        $body .= "• Most active day: {$stats['most_active_day'] ?? 'N/A'}\n\n";
+        $body .= "• Most active day: " . ($stats['most_active_day'] ?? 'N/A') . "\n\n";
 
         // Top companies
         if (!empty($companies)) {
@@ -252,14 +252,14 @@ class Emailer {
      * Build system notification email
      */
     private function buildSystemNotificationEmail($type, $message, $details) {
-        $icons = [
+        // Using PHP 8.0 match expression for cleaner syntax
+        $icon = match ($type) {
             'error' => '❌',
             'warning' => '⚠️',
             'info' => 'ℹ️',
-            'success' => '✅'
-        ];
-
-        $icon = $icons[$type] ?? '🔧';
+            'success' => '✅',
+            default => '🔧',
+        };
 
         $body = "$icon SYSTEM NOTIFICATION\n\n";
         $body .= "Type: " . ucfirst($type) . "\n";
@@ -399,7 +399,8 @@ class Emailer {
                     $jobText = strtolower($job['title'] . ' ' . ($job['description'] ?? ''));
 
                     foreach ($keywords as $keyword) {
-                        if (strpos($jobText, strtolower($keyword)) !== false) {
+                        // Using PHP 8.0 str_contains() for better readability
+                        if (str_contains($jobText, strtolower($keyword))) {
                             return true;
                         }
                     }
