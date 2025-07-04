@@ -1,58 +1,66 @@
 <?php
-// setup.php - Initial setup script for Job Feed Aggregator
-
+// setup.php - Simplified setup script for Job Feed Aggregator
 session_start();
+
+// Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$step = $_GET['step'] ?? 1;
+$step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
 $errors = [];
 $success = [];
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    switch ($_POST['action']) {
-        case 'test_database':
-            $result = testDatabaseConnection($_POST);
-            if ($result['success']) {
-                $success[] = $result['message'];
-                $_SESSION['db_config'] = $_POST;
-                $step = 2; // Advance to next step
-            } else {
-                $errors[] = $result['message'];
-            }
-            break;
+    $action = isset($_POST['action']) ? $_POST['action'] : '';
 
-        case 'create_config':
-            $result = createConfigFile($_SESSION['db_config'] ?? [], $_POST);
-            if ($result['success']) {
-                $success[] = $result['message'];
-                $step = 3;
-            } else {
-                $errors[] = $result['message'];
-            }
-            break;
-
-        case 'setup_database':
-            $result = setupDatabase();
-            if ($result['success']) {
-                $success[] = $result['message'];
-                $step = 4;
-            } else {
-                $errors[] = $result['message'];
-            }
-            break;
-
-        case 'add_sample_data':
-            $result = addSampleData();
-            if ($result['success']) {
-                $success[] = $result['message'];
-                $step = 5;
-            } else {
-                $errors[] = $result['message'];
-            }
-            break;
+    if ($action === 'test_database') {
+        $result = testDatabaseConnection($_POST);
+        if ($result['success']) {
+            $success[] = $result['message'];
+            $_SESSION['db_config'] = $_POST;
+            $_SESSION['db_tested'] = true;
+        } else {
+            $errors[] = $result['message'];
+        }
     }
+
+    if ($action === 'create_config') {
+        $dbConfig = isset($_SESSION['db_config']) ? $_SESSION['db_config'] : [];
+        $result = createConfigFile($dbConfig, $_POST);
+        if ($result['success']) {
+            $success[] = $result['message'];
+            $step = 3;
+        } else {
+            $errors[] = $result['message'];
+        }
+    }
+
+    if ($action === 'setup_database') {
+        $result = setupDatabase();
+        if ($result['success']) {
+            $success[] = $result['message'];
+            $step = 4;
+        } else {
+            $errors[] = $result['message'];
+        }
+    }
+
+    if ($action === 'add_sample_data') {
+        $result = addSampleData();
+        if ($result['success']) {
+            $success[] = $result['message'];
+            $step = 5;
+        } else {
+            $errors[] = $result['message'];
+        }
+    }
+}
+
+// Check if we can advance to step 2
+$canAdvanceToStep2 = isset($_SESSION['db_tested']) && $_SESSION['db_tested'] === true;
+if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
+    $step = 2;
 }
 
 ?>
@@ -62,125 +70,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Feed Aggregator Setup</title>
-
-    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-
     <style>
-        :root {
-            --primary-color: #667eea;
-            --secondary-color: #764ba2;
-        }
-
-        .hero-gradient {
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-        }
-
-        .setup-step {
-            transition: all 0.3s ease;
-        }
-
-        .setup-step.active {
-            border-left: 4px solid var(--primary-color);
-            background: rgba(102, 126, 234, 0.05);
-        }
-
-        .step-number {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #e9ecef;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-
-        .step-number.completed {
-            background: #28a745;
-            color: white;
-        }
-
-        .step-number.active {
-            background: var(--primary-color);
-            color: white;
-        }
-
-        .feature-card {
-            background: white;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            transition: all 0.3s ease;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .config-preview {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 1rem;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
+        .hero-gradient { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .step-number { width: 40px; height: 40px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .step-number.completed { background: #28a745; color: white; }
+        .step-number.active { background: #667eea; color: white; }
     </style>
 </head>
 <body class="bg-light">
     <!-- Header -->
     <div class="hero-gradient text-white py-4">
         <div class="container">
-            <div class="row align-items-center">
-                <div class="col">
-                    <h1 class="h3 mb-0">
-                        <i class="bi bi-briefcase-fill me-2"></i>
-                        Job Feed Aggregator Setup
-                    </h1>
-                    <p class="mb-0 opacity-75">Configure your intelligent job monitoring system</p>
-                </div>
-                <div class="col-auto">
-                    <div class="badge bg-light text-primary fs-6">Step <?= $step ?> of 5</div>
-                </div>
-            </div>
+            <h1 class="h3 mb-0">
+                <i class="bi bi-briefcase-fill me-2"></i>
+                Job Feed Aggregator Setup
+            </h1>
+            <p class="mb-0 opacity-75">Step <?php echo $step; ?> of 5</p>
         </div>
     </div>
 
     <div class="container py-4">
+
         <!-- Progress Steps -->
         <div class="row mb-4">
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center">
                     <?php
                     $steps = [
-                        1 => ['icon' => 'database', 'title' => 'Database'],
-                        2 => ['icon' => 'gear', 'title' => 'Configuration'],
-                        3 => ['icon' => 'table', 'title' => 'Setup Tables'],
-                        4 => ['icon' => 'plus-circle', 'title' => 'Sample Data'],
-                        5 => ['icon' => 'check-circle', 'title' => 'Complete']
+                        1 => 'Database',
+                        2 => 'Configuration',
+                        3 => 'Setup Tables',
+                        4 => 'Sample Data',
+                        5 => 'Complete'
                     ];
 
-                    foreach ($steps as $num => $stepInfo):
+                    foreach ($steps as $num => $title) {
                         $isCompleted = $step > $num;
                         $isActive = $step == $num;
                         $statusClass = $isCompleted ? 'completed' : ($isActive ? 'active' : '');
+                        echo '<div class="text-center">';
+                        echo '<div class="step-number ' . $statusClass . ' mx-auto mb-2">';
+                        echo $isCompleted ? '<i class="bi bi-check"></i>' : $num;
+                        echo '</div>';
+                        echo '<small class="d-block fw-semibold">' . $title . '</small>';
+                        echo '</div>';
+                    }
                     ?>
-                    <div class="text-center">
-                        <div class="step-number <?= $statusClass ?> mx-auto mb-2">
-                            <?php if ($isCompleted): ?>
-                                <i class="bi bi-check"></i>
-                            <?php else: ?>
-                                <?= $num ?>
-                            <?php endif; ?>
-                        </div>
-                        <small class="d-block fw-semibold"><?= $stepInfo['title'] ?></small>
-                    </div>
-                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
@@ -190,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="alert alert-danger alert-dismissible fade show">
                 <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Setup Error</h6>
                 <?php foreach ($errors as $error): ?>
-                    <div><?= htmlspecialchars($error) ?></div>
+                    <div><?php echo htmlspecialchars($error); ?></div>
                 <?php endforeach; ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
@@ -200,22 +137,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="alert alert-success alert-dismissible fade show">
                 <h6 class="alert-heading"><i class="bi bi-check-circle me-2"></i>Success!</h6>
                 <?php foreach ($success as $message): ?>
-                    <div><?= htmlspecialchars($message) ?></div>
+                    <div><?php echo htmlspecialchars($message); ?></div>
                 <?php endforeach; ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
-        <?php endif; ?>
-
-        <!-- Debug Info (remove in production) -->
-        <?php if (isset($_GET['debug'])): ?>
-        <div class="alert alert-info">
-            <strong>Debug Info:</strong><br>
-            Current Step: <?= $step ?><br>
-            POST Action: <?= $_POST['action'] ?? 'none' ?><br>
-            Session DB Config: <?= !empty($_SESSION['db_config']) ? 'Set' : 'Not set' ?><br>
-            Success Messages: <?= count($success) ?><br>
-            Error Messages: <?= count($errors) ?>
-        </div>
         <?php endif; ?>
 
         <!-- Step Content -->
@@ -232,23 +157,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">First, let's configure your database connection. Make sure you have created a MySQL database and have the connection details ready.</p>
+                        <p class="text-muted">Configure your database connection.</p>
 
-                        <!-- Pre-flight checks -->
+                        <!-- System checks -->
                         <div class="mb-3">
-                            <h6>System Checks:</h6>
+                            <h6>System Status:</h6>
                             <ul class="list-unstyled small">
                                 <li>
-                                    <i class="bi bi-<?= is_writable(__DIR__) ? 'check-circle text-success' : 'x-circle text-danger' ?> me-2"></i>
-                                    Directory writable: <?= is_writable(__DIR__) ? 'Yes' : 'No' ?>
+                                    <i class="bi bi-<?php echo extension_loaded('pdo_mysql') ? 'check-circle text-success' : 'x-circle text-danger'; ?> me-2"></i>
+                                    PDO MySQL: <?php echo extension_loaded('pdo_mysql') ? 'Available' : 'Missing'; ?>
                                 </li>
                                 <li>
-                                    <i class="bi bi-<?= extension_loaded('pdo_mysql') ? 'check-circle text-success' : 'x-circle text-danger' ?> me-2"></i>
-                                    PDO MySQL: <?= extension_loaded('pdo_mysql') ? 'Available' : 'Missing' ?>
-                                </li>
-                                <li>
-                                    <i class="bi bi-<?= function_exists('mail') ? 'check-circle text-success' : 'x-circle text-danger' ?> me-2"></i>
-                                    Mail function: <?= function_exists('mail') ? 'Available' : 'Missing' ?>
+                                    <i class="bi bi-<?php echo is_writable(__DIR__) ? 'check-circle text-success' : 'x-circle text-danger'; ?> me-2"></i>
+                                    Directory writable: <?php echo is_writable(__DIR__) ? 'Yes' : 'No'; ?>
                                 </li>
                             </ul>
                         </div>
@@ -278,27 +199,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                             </div>
 
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-database-check me-2"></i>Test Database Connection
-                                </button>
-                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-database-check me-2"></i>Test Database Connection
+                            </button>
                         </form>
 
-                        <!-- Show continue button if database test was successful -->
-                        <?php if (!empty($success) && !empty($_SESSION['db_config'])): ?>
+                        <?php if ($canAdvanceToStep2): ?>
                         <div class="mt-3 text-center">
-                            <a href="?step=2" class="btn btn-success">
+                            <a href="?advance=2" class="btn btn-success">
                                 <i class="bi bi-arrow-right me-2"></i>Continue to Email Setup
                             </a>
                         </div>
-                        <?php else: ?>
+                        <?php endif; ?>
+
                         <div class="mt-3 text-center">
-                            <a href="?step=2&skip_test=1" class="btn btn-outline-warning btn-sm">
-                                <i class="bi bi-skip-forward me-2"></i>Skip Test (Manual Config)
+                            <a href="?step=2" class="btn btn-outline-warning btn-sm">
+                                <i class="bi bi-skip-forward me-2"></i>Skip Database Test
                             </a>
                         </div>
-                        <?php endif;
                     </div>
                 </div>
 
@@ -312,14 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">Configure email settings for job alerts and notifications.</p>
-
-                        <?php if (isset($_GET['skip_test']) && $_GET['skip_test'] == 1): ?>
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle me-2"></i>
-                            <strong>Database test skipped.</strong> Make sure to manually create your config/config.php file with correct database settings.
-                        </div>
-                        <?php endif; ?>
+                        <p class="text-muted">Configure email settings for job alerts.</p>
 
                         <form method="post">
                             <input type="hidden" name="action" value="create_config">
@@ -328,12 +239,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <div class="col-md-6">
                                     <label class="form-label">Your Email Address</label>
                                     <input type="email" class="form-control" name="email_user" required>
-                                    <div class="form-text">This will be used as the "from" address</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Alert Recipient</label>
                                     <input type="email" class="form-control" name="email_to" required>
-                                    <div class="form-text">Where job alerts will be sent</div>
                                 </div>
                             </div>
 
@@ -344,19 +253,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         Enable Email Alerts
                                     </label>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="enableNotifications" name="admin_notifications">
-                                    <label class="form-check-label" for="enableNotifications">
-                                        Enable System Notifications
-                                    </label>
-                                </div>
                             </div>
 
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-gear me-2"></i>Create Configuration
-                                </button>
-                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-gear me-2"></i>Create Configuration
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -371,28 +272,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">Now let's create the database tables needed for the job feed aggregator.</p>
-
-                        <div class="mb-3">
-                            <h6>Tables to be created:</h6>
-                            <ul class="list-unstyled">
-                                <li><i class="bi bi-table text-primary me-2"></i>companies - Store company and feed information</li>
-                                <li><i class="bi bi-table text-primary me-2"></i>jobs - Store job listings with enhanced metadata</li>
-                                <li><i class="bi bi-table text-primary me-2"></i>job_tags - Flexible job categorization</li>
-                                <li><i class="bi bi-table text-primary me-2"></i>saved_jobs - User saved jobs</li>
-                                <li><i class="bi bi-table text-primary me-2"></i>job_alerts - Email alert preferences</li>
-                                <li><i class="bi bi-table text-primary me-2"></i>tags - Common tags and skills</li>
-                            </ul>
-                        </div>
+                        <p class="text-muted">Create the database tables.</p>
 
                         <form method="post">
                             <input type="hidden" name="action" value="setup_database">
-
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-database-add me-2"></i>Create Database Tables
-                                </button>
-                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-database-add me-2"></i>Create Database Tables
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -407,40 +293,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted">Add some sample companies to get you started. You can always add more or remove these later.</p>
-
-                        <div class="row mb-4">
-                            <div class="col-md-4 mb-3">
-                                <div class="feature-card text-center">
-                                    <i class="bi bi-github display-6 text-primary mb-2"></i>
-                                    <h6>GitHub</h6>
-                                    <small class="text-muted">Technology company careers</small>
-                                </div>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <div class="feature-card text-center">
-                                    <i class="bi bi-play-circle display-6 text-danger mb-2"></i>
-                                    <h6>Netflix</h6>
-                                    <small class="text-muted">Entertainment industry jobs</small>
-                                </div>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <div class="feature-card text-center">
-                                    <i class="bi bi-shop display-6 text-success mb-2"></i>
-                                    <h6>Shopify</h6>
-                                    <small class="text-muted">E-commerce platform roles</small>
-                                </div>
-                            </div>
-                        </div>
+                        <p class="text-muted">Add sample companies to get started.</p>
 
                         <form method="post">
                             <input type="hidden" name="action" value="add_sample_data">
-
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-plus-circle me-2"></i>Add Sample Companies
-                                </button>
-                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle me-2"></i>Add Sample Companies
+                            </button>
                         </form>
 
                         <div class="text-center mt-3">
@@ -451,7 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <?php elseif ($step == 5): ?>
+                <?php else: ?>
                 <!-- Step 5: Complete -->
                 <div class="card">
                     <div class="card-header bg-success text-white">
@@ -460,47 +319,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             Setup Complete!
                         </h5>
                     </div>
-                    <div class="card-body">
-                        <div class="text-center mb-4">
-                            <i class="bi bi-check-circle-fill display-1 text-success mb-3"></i>
-                            <h4>🎉 Congratulations!</h4>
-                            <p class="text-muted">Your Job Feed Aggregator is now ready to use.</p>
-                        </div>
-
-                        <div class="row mb-4">
-                            <div class="col-md-6 mb-3">
-                                <div class="feature-card">
-                                    <h6><i class="bi bi-speedometer me-2"></i>What's New</h6>
-                                    <ul class="list-unstyled small">
-                                        <li>✅ Location-based filtering</li>
-                                        <li>✅ Remote job detection</li>
-                                        <li>✅ Job type categorization</li>
-                                        <li>✅ Department sorting</li>
-                                        <li>✅ Enhanced search capabilities</li>
-                                        <li>✅ Smart job alerts</li>
-                                    </ul>
-                                </div>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <div class="feature-card">
-                                    <h6><i class="bi bi-list-check me-2"></i>Next Steps</h6>
-                                    <ul class="list-unstyled small">
-                                        <li>1. Add your company feeds</li>
-                                        <li>2. Configure cron job automation</li>
-                                        <li>3. Set up job alerts</li>
-                                        <li>4. Test the scraping system</li>
-                                        <li>5. Start monitoring!</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-info">
-                            <h6><i class="bi bi-info-circle me-2"></i>Cron Job Setup</h6>
-                            <p class="mb-2">To automate job monitoring, add this to your cron tab:</p>
-                            <code>*/30 * * * * php <?= __DIR__ ?>/scripts/monitor.php</code>
-                            <p class="mb-0 mt-2 small">This will check for new jobs every 30 minutes.</p>
-                        </div>
+                    <div class="card-body text-center">
+                        <i class="bi bi-check-circle-fill display-1 text-success mb-3"></i>
+                        <h4>🎉 Congratulations!</h4>
+                        <p class="text-muted mb-4">Your Job Feed Aggregator is ready!</p>
 
                         <div class="d-grid gap-2 d-md-flex justify-content-md-center">
                             <a href="index.php" class="btn btn-success btn-lg">
@@ -508,9 +330,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </a>
                             <a href="manage.php" class="btn btn-primary btn-lg">
                                 <i class="bi bi-plus-lg me-2"></i>Add Job Feeds
-                            </a>
-                            <a href="test.php" class="btn btn-outline-info btn-lg">
-                                <i class="bi bi-tools me-2"></i>Test System
                             </a>
                         </div>
                     </div>
@@ -521,68 +340,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 
 <?php
 function testDatabaseConnection($config) {
-    // Validate required fields
     if (empty($config['db_host']) || empty($config['db_name']) || empty($config['db_user'])) {
         return [
             'success' => false,
-            'message' => 'Please fill in all required database fields (host, name, user)'
+            'message' => 'Please fill in all required fields'
         ];
     }
 
     try {
         $dsn = "mysql:host={$config['db_host']};charset=utf8mb4";
-
-        // First test basic connection to MySQL server
         $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_TIMEOUT => 5
+            PDO::ATTR_TIMEOUT => 10
         ]);
 
-        // Check if database exists, if not try to create it
+        // Check if database exists
         $stmt = $pdo->query("SHOW DATABASES LIKE '{$config['db_name']}'");
         if (!$stmt->fetch()) {
-            // Try to create the database
             $pdo->exec("CREATE DATABASE `{$config['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         }
 
-        // Now connect to the specific database
+        // Test connection to the database
         $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
         $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
         ]);
 
-        // Test if we can create tables (check permissions)
-        $pdo->exec("CREATE TABLE IF NOT EXISTS test_permissions (id INT) ENGINE=InnoDB");
-        $pdo->exec("DROP TABLE IF EXISTS test_permissions");
-
         return [
             'success' => true,
-            'message' => 'Database connection successful! Database "' . $config['db_name'] . '" is ready.'
+            'message' => 'Database connection successful!'
         ];
 
     } catch (PDOException $e) {
-        $errorMessage = 'Database connection failed: ';
-
-        if (strpos($e->getMessage(), 'Access denied') !== false) {
-            $errorMessage .= 'Invalid username or password';
-        } elseif (strpos($e->getMessage(), 'Unknown database') !== false) {
-            $errorMessage .= 'Database "' . $config['db_name'] . '" does not exist and could not be created';
-        } elseif (strpos($e->getMessage(), 'Connection refused') !== false) {
-            $errorMessage .= 'Cannot connect to MySQL server at ' . $config['db_host'];
-        } else {
-            $errorMessage .= $e->getMessage();
-        }
-
         return [
             'success' => false,
-            'message' => $errorMessage
+            'message' => 'Database error: ' . $e->getMessage()
         ];
     }
 }
@@ -590,20 +388,17 @@ function testDatabaseConnection($config) {
 function createConfigFile($dbConfig, $emailConfig) {
     $configContent = "<?php\nreturn [\n";
     $configContent .= "    'database' => [\n";
-    $configContent .= "        'host' => '{$dbConfig['db_host']}',\n";
-    $configContent .= "        'name' => '{$dbConfig['db_name']}',\n";
-    $configContent .= "        'user' => '{$dbConfig['db_user']}',\n";
-    $configContent .= "        'pass' => '{$dbConfig['db_pass']}'\n";
+    $configContent .= "        'host' => '" . ($dbConfig['db_host'] ?? 'localhost') . "',\n";
+    $configContent .= "        'name' => '" . ($dbConfig['db_name'] ?? 'job_feed') . "',\n";
+    $configContent .= "        'user' => '" . ($dbConfig['db_user'] ?? '') . "',\n";
+    $configContent .= "        'pass' => '" . ($dbConfig['db_pass'] ?? '') . "'\n";
     $configContent .= "    ],\n";
     $configContent .= "    'email' => [\n";
     $configContent .= "        'host' => 'smtp.gmail.com',\n";
     $configContent .= "        'port' => 587,\n";
     $configContent .= "        'user' => '{$emailConfig['email_user']}',\n";
     $configContent .= "        'pass' => 'your_email_password',\n";
-    $configContent .= "        'to' => '{$emailConfig['email_to']}',\n";
-    $configContent .= "        'alerts_enabled' => " . (isset($emailConfig['enable_alerts']) ? 'true' : 'false') . ",\n";
-    $configContent .= "        'admin_notifications' => " . (isset($emailConfig['admin_notifications']) ? 'true' : 'false') . ",\n";
-    $configContent .= "        'admin_email' => '{$emailConfig['email_to']}'\n";
+    $configContent .= "        'to' => '{$emailConfig['email_to']}'\n";
     $configContent .= "    ]\n";
     $configContent .= "];\n";
 
@@ -617,12 +412,12 @@ function createConfigFile($dbConfig, $emailConfig) {
     if (file_put_contents($configFile, $configContent)) {
         return [
             'success' => true,
-            'message' => 'Configuration file created successfully!'
+            'message' => 'Configuration file created!'
         ];
     } else {
         return [
             'success' => false,
-            'message' => 'Failed to create configuration file. Check file permissions.'
+            'message' => 'Could not create config file'
         ];
     }
 }
@@ -635,13 +430,13 @@ function setupDatabase() {
 
         return [
             'success' => true,
-            'message' => 'Database tables created successfully!'
+            'message' => 'Database tables created!'
         ];
 
     } catch (Exception $e) {
         return [
             'success' => false,
-            'message' => 'Failed to create database tables: ' . $e->getMessage()
+            'message' => 'Database setup failed: ' . $e->getMessage()
         ];
     }
 }
@@ -655,58 +450,30 @@ function addSampleData() {
         $company = new Company($db);
 
         $sampleCompanies = [
-            [
-                'name' => 'GitHub',
-                'careers_url' => 'https://github.com/about/careers',
-                'selector' => 'a[href*="job"]',
-                'website_url' => 'https://github.com',
-                'industry' => 'Technology',
-                'logo_url' => 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-            ],
-            [
-                'name' => 'Netflix',
-                'careers_url' => 'https://jobs.netflix.com/',
-                'selector' => 'a[href*="job"]',
-                'website_url' => 'https://netflix.com',
-                'industry' => 'Entertainment'
-            ],
-            [
-                'name' => 'Shopify',
-                'careers_url' => 'https://www.shopify.com/careers',
-                'selector' => '.job-listing a',
-                'website_url' => 'https://shopify.com',
-                'industry' => 'E-commerce'
-            ]
+            ['GitHub', 'https://github.com/about/careers', 'a[href*="job"]', 'https://github.com', 'Technology'],
+            ['Netflix', 'https://jobs.netflix.com/', 'a[href*="job"]', 'https://netflix.com', 'Entertainment'],
+            ['Shopify', 'https://www.shopify.com/careers', '.job-listing a', 'https://shopify.com', 'E-commerce']
         ];
 
         $added = 0;
-        foreach ($sampleCompanies as $companyData) {
+        foreach ($sampleCompanies as $data) {
             try {
-                $company->add(
-                    $companyData['name'],
-                    $companyData['careers_url'],
-                    $companyData['selector'],
-                    null, // location_selector
-                    null, // description_selector
-                    $companyData['website_url'],
-                    $companyData['logo_url'] ?? null,
-                    $companyData['industry']
-                );
+                $company->add($data[0], $data[1], $data[2], null, null, $data[3], null, $data[4]);
                 $added++;
             } catch (Exception $e) {
-                // Company might already exist, continue
+                // Company might exist already
             }
         }
 
         return [
             'success' => true,
-            'message' => "Added $added sample companies successfully!"
+            'message' => "Added $added sample companies!"
         ];
 
     } catch (Exception $e) {
         return [
             'success' => false,
-            'message' => 'Failed to add sample data: ' . $e->getMessage()
+            'message' => 'Sample data failed: ' . $e->getMessage()
         ];
     }
 }

@@ -1,56 +1,15 @@
 <?php
 // index.php - Main entry point for Job Feed Aggregator
 
-// Check if we need to run migration
-if (!file_exists(__DIR__ . '/config/config.php')) {
-    header('Location: setup.php');
-    exit;
-}
-
 // Basic error handling
 error_reporting(E_ALL);
 ini_set('display_errors', 0); // Don't show errors in production
 ini_set('log_errors', 1);
 
-// Try to load the required classes
-$hasRequiredFiles = true;
-$requiredFiles = [
-    'src/Database.php',
-    'src/Company.php',
-    'src/JobScraper.php',
-    'src/JobMonitor.php',
-    'src/Emailer.php'
-];
-
-foreach ($requiredFiles as $file) {
-    if (!file_exists(__DIR__ . '/' . $file)) {
-        $hasRequiredFiles = false;
-        break;
-    }
-}
-
-// If we're missing files or have database issues, show setup page
-if (!$hasRequiredFiles) {
-    showSetupPage();
-    exit;
-}
-
-// Try to initialize database
-try {
-    require_once __DIR__ . '/src/Database.php';
-    $db = new Database();
-
-    // Check if tables exist
-    $pdo = $db->getConnection();
-    $stmt = $pdo->query("SHOW TABLES LIKE 'companies'");
-    if (!$stmt->fetch()) {
-        // Tables don't exist, redirect to migration
-        header('Location: migrate.php');
-        exit;
-    }
-
-} catch (Exception $e) {
-    showSetupPage($e->getMessage());
+// Check if setup is needed and redirect accordingly
+$setupNeeded = checkIfSetupNeeded();
+if ($setupNeeded['needed']) {
+    header('Location: ' . $setupNeeded['redirect']);
     exit;
 }
 
@@ -882,6 +841,100 @@ try {
 </html>
 
 <?php
+function checkIfSetupNeeded() {
+    // Check 1: Config file exists
+    if (!file_exists(__DIR__ . '/config/config.php')) {
+        return [
+            'needed' => true,
+            'redirect' => 'setup.php?reason=no_config',
+            'message' => 'Configuration file missing'
+        ];
+    }
+
+    // Check 2: Required files exist
+    $requiredFiles = [
+        'src/Database.php',
+        'src/Company.php',
+        'src/JobScraper.php',
+        'src/JobMonitor.php',
+        'src/Emailer.php'
+    ];
+
+    foreach ($requiredFiles as $file) {
+        if (!file_exists(__DIR__ . '/' . $file)) {
+            return [
+                'needed' => true,
+                'redirect' => 'setup.php?reason=missing_files',
+                'message' => 'Core files missing'
+            ];
+        }
+    }
+
+    // Check 3: Database connection and tables
+    try {
+        require_once __DIR__ . '/src/Database.php';
+        $db = new Database();
+        $pdo = $db->getConnection();
+
+        // Check if tables exist
+        $stmt = $pdo->query("SHOW TABLES LIKE 'companies'");
+        if (!$stmt->fetch()) {
+            // Check if this looks like an existing Job Monitor (v1) installation
+            $stmt = $pdo->query("SHOW TABLES");
+            $tables = [];
+            while ($row = $stmt->fetch(PDO::FETCH_NUM)) {
+                $tables[] = $row[0];
+            }
+
+            if (in_array('companies', $tables) || in_array('jobs', $tables)) {
+                // Has some tables but not the new structure - needs migration
+                return [
+                    'needed' => true,
+                    'redirect' => 'migrate.php?reason=upgrade_needed',
+                    'message' => 'Database upgrade needed'
+                ];
+            } else {
+                // Fresh database - needs full setup
+                return [
+                    'needed' => true,
+                    'redirect' => 'setup.php?step=3&reason=no_tables',
+                    'message' => 'Database tables missing'
+                ];
+            }
+        }
+
+        // Check if we have the enhanced structure
+        $stmt = $pdo->query("DESCRIBE companies");
+        $columns = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $columns[] = $row['Field'];
+        }
+
+        if (!in_array('industry', $columns) || !in_array('logo_url', $columns)) {
+            // Old structure detected - needs migration
+            return [
+                'needed' => true,
+                'redirect' => 'migrate.php?reason=old_structure',
+                'message' => 'Database structure needs upgrade'
+            ];
+        }
+
+    } catch (Exception $e) {
+        // Database connection failed
+        return [
+            'needed' => true,
+            'redirect' => 'setup.php?reason=db_error&error=' . urlencode($e->getMessage()),
+            'message' => 'Database connection failed'
+        ];
+    }
+
+    // All checks passed - no setup needed
+    return [
+        'needed' => false,
+        'message' => 'System ready'
+    ];
+}
+
 function showSetupPage($error = null) {
     ?>
     <!DOCTYPE html>
