@@ -1,653 +1,409 @@
 <?php
-// setup.php - Simplified setup script for Job Feed Aggregator
-session_start();
-
-// Enable error reporting for debugging
+// setup.php - Easy installation and setup script
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
-$errors = [];
-$success = [];
-
-// Check why user was redirected here
-$redirectReason = isset($_GET['reason']) ? $_GET['reason'] : '';
-$redirectMessage = '';
-
-switch ($redirectReason) {
-    case 'no_config':
-        $redirectMessage = 'Configuration file not found. Let\'s set up your Job Feed Aggregator.';
-        break;
-    case 'missing_files':
-        $redirectMessage = 'Some core files are missing. Please ensure all files are uploaded correctly.';
-        break;
-    case 'no_tables':
-        $redirectMessage = 'Database tables need to be created.';
-        $step = 3; // Jump to database setup
-        break;
-    case 'db_error':
-        $redirectMessage = 'Database connection issue: ' . urldecode($_GET['error'] ?? 'Unknown error');
-        break;
-}
+$step = $_GET['step'] ?? 1;
+$message = '';
+$messageType = '';
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = isset($_POST['action']) ? $_POST['action'] : '';
+    switch ($_POST['action'] ?? '') {
+        case 'create_config':
+            try {
+                $config = [
+                    'database' => [
+                        'host' => $_POST['db_host'],
+                        'name' => $_POST['db_name'],
+                        'user' => $_POST['db_user'],
+                        'pass' => $_POST['db_pass']
+                    ],
+                    'email' => [
+                        'host' => $_POST['email_host'],
+                        'port' => (int)$_POST['email_port'],
+                        'user' => $_POST['email_user'],
+                        'pass' => $_POST['email_pass'],
+                        'to' => $_POST['email_to']
+                    ]
+                ];
 
-    if ($action === 'test_database') {
-        $result = testDatabaseConnection($_POST);
-        if ($result['success']) {
-            $success[] = $result['message'];
-            $_SESSION['db_config'] = $_POST;
-            $_SESSION['db_tested'] = true;
-        } else {
-            $errors[] = $result['message'];
-        }
-    }
+                $configContent = "<?php\nreturn " . var_export($config, true) . ";\n";
 
-    if ($action === 'create_config') {
-        $dbConfig = isset($_SESSION['db_config']) ? $_SESSION['db_config'] : [];
-        $result = createConfigFile($dbConfig, $_POST);
-        if ($result['success']) {
-            $success[] = $result['message'];
-            $step = 3;
-        } else {
-            $errors[] = $result['message'];
-        }
-    }
+                if (file_put_contents(__DIR__ . '/config/config.php', $configContent)) {
+                    $message = "Configuration file created successfully!";
+                    $messageType = 'success';
+                    $step = 2;
+                } else {
+                    $message = "Failed to create configuration file. Check file permissions.";
+                    $messageType = 'danger';
+                }
+            } catch (Exception $e) {
+                $message = "Error: " . $e->getMessage();
+                $messageType = 'danger';
+            }
+            break;
 
-    if ($action === 'setup_database') {
-        $result = setupDatabase();
-        if ($result['success']) {
-            $success[] = $result['message'];
-            $step = 4;
-        } else {
-            $errors[] = $result['message'];
-        }
-    }
+        case 'test_database':
+            try {
+                require_once __DIR__ . '/src/Database.php';
+                $db = new Database();
 
-    if ($action === 'add_sample_data') {
-        $result = addSampleData();
-        if ($result['success']) {
-            $success[] = $result['message'];
-            $step = 5;
-        } else {
-            $errors[] = $result['message'];
-        }
+                if ($db->testConnection()) {
+                    $db->createTables();
+                    $message = "Database connection successful and tables created!";
+                    $messageType = 'success';
+                    $step = 3;
+                } else {
+                    $message = "Database connection failed. Please check your settings.";
+                    $messageType = 'danger';
+                }
+            } catch (Exception $e) {
+                $message = "Database error: " . $e->getMessage();
+                $messageType = 'danger';
+            }
+            break;
+
+        case 'test_complete':
+            try {
+                require_once __DIR__ . '/src/Database.php';
+                require_once __DIR__ . '/src/Company.php';
+                require_once __DIR__ . '/src/JobScraper.php';
+                require_once __DIR__ . '/src/Emailer.php';
+                require_once __DIR__ . '/src/JobMonitor.php';
+
+                $monitor = new JobMonitor();
+                $configCheck = $monitor->checkConfiguration();
+
+                if ($configCheck['configured']) {
+                    $message = "Setup completed successfully! You can now use the Job Monitor.";
+                    $messageType = 'success';
+                    $step = 4;
+                } else {
+                    $message = "Configuration issues found: " . implode(', ', $configCheck['issues']);
+                    $messageType = 'warning';
+                }
+            } catch (Exception $e) {
+                $message = "Error during final test: " . $e->getMessage();
+                $messageType = 'danger';
+            }
+            break;
     }
 }
 
-// Check if we can advance to step 2
-$canAdvanceToStep2 = isset($_SESSION['db_tested']) && $_SESSION['db_tested'] === true;
-if (isset($_GET['advance']) && $_GET['advance'] == '2' && $canAdvanceToStep2) {
-    $step = 2;
-}
+// Check current status
+$checks = [
+    'config_exists' => file_exists(__DIR__ . '/config/config.php'),
+    'config_dir_writable' => is_writable(__DIR__ . '/config'),
+    'required_files' => true
+];
 
+$requiredFiles = [
+    'src/Database.php',
+    'src/Company.php',
+    'src/JobScraper.php',
+    'src/Emailer.php',
+    'src/JobMonitor.php'
+];
+
+foreach ($requiredFiles as $file) {
+    if (!file_exists(__DIR__ . '/' . $file)) {
+        $checks['required_files'] = false;
+        break;
+    }
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Feed Aggregator Setup</title>
+    <title>Job Monitor Setup</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        .hero-gradient { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .step-number { width: 40px; height: 40px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-        .step-number.completed { background: #28a745; color: white; }
-        .step-number.active { background: #667eea; color: white; }
+        .setup-step {
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+        .step-complete {
+            border-left-color: #198754;
+            background: #d1e7dd;
+        }
+        .step-number {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="bg-light">
-    <!-- Header -->
-    <div class="hero-gradient text-white py-4">
+    <nav class="navbar navbar-dark bg-primary">
         <div class="container">
-            <h1 class="h3 mb-0">
-                <i class="bi bi-briefcase-fill me-2"></i>
-                Job Feed Aggregator Setup
-            </h1>
-            <p class="mb-0 opacity-75">Step <?php echo $step; ?> of 5</p>
+            <span class="navbar-brand">
+                <i class="bi bi-gear me-2"></i>
+                Job Monitor Setup
+            </span>
         </div>
-    </div>
+    </nav>
 
-    <div class="container py-4">
-
-        <!-- Progress Steps -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center">
-                    <?php
-                    $steps = [
-                        1 => 'Database',
-                        2 => 'Configuration',
-                        3 => 'Setup Tables',
-                        4 => 'Sample Data',
-                        5 => 'Complete'
-                    ];
-
-                    foreach ($steps as $num => $title) {
-                        $isCompleted = $step > $num;
-                        $isActive = $step == $num;
-                        $statusClass = $isCompleted ? 'completed' : ($isActive ? 'active' : '');
-                        echo '<div class="text-center">';
-                        echo '<div class="step-number ' . $statusClass . ' mx-auto mb-2">';
-                        echo $isCompleted ? '<i class="bi bi-check"></i>' : $num;
-                        echo '</div>';
-                        echo '<small class="d-block fw-semibold">' . $title . '</small>';
-                        echo '</div>';
-                    }
-                    ?>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="text-center mb-4">
+                    <h1 class="h3">Welcome to Job Monitor Setup</h1>
+                    <p class="text-muted">Let's get your job monitoring system configured</p>
                 </div>
-            </div>
-        </div>
 
-        <!-- Show redirect reason if user was redirected -->
-        <?php if (!empty($redirectMessage)): ?>
-            <div class="alert alert-info alert-dismissible fade show">
-                <h6 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Setup Required</h6>
-                <div><?php echo htmlspecialchars($redirectMessage); ?></div>
-                <div class="mt-2">
-                    <small>
-                        <a href="index.php" class="text-decoration-none">
-                            <i class="bi bi-arrow-left me-1"></i>Try accessing the main interface anyway
-                        </a>
-                    </small>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        <?php endif; ?>
+                <!-- Progress Steps -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <?php
+                            $steps = [
+                                1 => 'Configuration',
+                                2 => 'Database',
+                                3 => 'Verification',
+                                4 => 'Complete'
+                            ];
 
-        <!-- Alert Messages -->
-        <?php if (!empty($errors)): ?>
-            <div class="alert alert-danger alert-dismissible fade show">
-                <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Setup Error</h6>
-                <?php foreach ($errors as $error): ?>
-                    <div><?php echo htmlspecialchars($error); ?></div>
-                <?php endforeach; ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        <?php endif; ?>
-
-        <?php if (!empty($success)): ?>
-            <div class="alert alert-success alert-dismissible fade show">
-                <h6 class="alert-heading"><i class="bi bi-check-circle me-2"></i>Success!</h6>
-                <?php foreach ($success as $message): ?>
-                    <div><?php echo htmlspecialchars($message); ?></div>
-                <?php endforeach; ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        <?php endif; ?>
-
-        <!-- Step Content -->
-        <div class="row">
-            <div class="col-lg-8 mx-auto">
-
-                <?php if ($step == 1): ?>
-                <!-- Step 1: Database Configuration -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-database me-2"></i>
-                            Database Configuration
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Configure your database connection.</p>
-
-                        <!-- System checks -->
-                        <div class="mb-3">
-                            <h6>System Status:</h6>
-                            <ul class="list-unstyled small">
-                                <li>
-                                    <i class="bi bi-<?php echo extension_loaded('pdo_mysql') ? 'check-circle text-success' : 'x-circle text-danger'; ?> me-2"></i>
-                                    PDO MySQL: <?php echo extension_loaded('pdo_mysql') ? 'Available' : 'Missing'; ?>
-                                </li>
-                                <li>
-                                    <i class="bi bi-<?php echo is_writable(__DIR__) ? 'check-circle text-success' : 'x-circle text-danger'; ?> me-2"></i>
-                                    Directory writable: <?php echo is_writable(__DIR__) ? 'Yes' : 'No'; ?>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <form method="post">
-                            <input type="hidden" name="action" value="test_database">
-
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Database Host</label>
-                                    <input type="text" class="form-control" name="db_host" value="localhost" required>
+                            foreach ($steps as $num => $title):
+                                $isActive = $num == $step;
+                                $isComplete = $num < $step;
+                                $class = $isComplete ? 'bg-success text-white' : ($isActive ? 'bg-primary text-white' : 'bg-light text-muted');
+                            ?>
+                                <div class="text-center">
+                                    <div class="step-number <?= $class ?> mb-2">
+                                        <?= $isComplete ? '✓' : $num ?>
+                                    </div>
+                                    <small><?= $title ?></small>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Database Name</label>
-                                    <input type="text" class="form-control" name="db_name" value="job_feed" required>
-                                </div>
-                            </div>
-
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Username</label>
-                                    <input type="text" class="form-control" name="db_user" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Password</label>
-                                    <input type="password" class="form-control" name="db_pass">
-                                </div>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-database-check me-2"></i>Test Database Connection
-                            </button>
-                        </form>
-
-                        <?php if ($canAdvanceToStep2): ?>
-                        <div class="mt-3 text-center">
-                            <a href="?advance=2" class="btn btn-success">
-                                <i class="bi bi-arrow-right me-2"></i>Continue to Email Setup
-                            </a>
-                        </div>
-                        <?php endif; ?>
-
-                        <div class="mt-3 text-center">
-                            <a href="?step=2" class="btn btn-outline-warning btn-sm">
-                                <i class="bi bi-skip-forward me-2"></i>Skip Database Test
-                            </a>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 </div>
 
-                <?php elseif ($step == 2): ?>
-                <!-- Step 2: Email Configuration -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-envelope me-2"></i>
-                            Email Configuration
-                        </h5>
+                <!-- Messages -->
+                <?php if ($message): ?>
+                    <div class="alert alert-<?= $messageType ?> alert-dismissible fade show" role="alert">
+                        <?= htmlspecialchars($message) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                    <div class="card-body">
-                        <p class="text-muted">Configure email settings for job alerts.</p>
-
-                        <form method="post">
-                            <input type="hidden" name="action" value="create_config">
-
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Your Email Address</label>
-                                    <input type="email" class="form-control" name="email_user" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Alert Recipient</label>
-                                    <input type="email" class="form-control" name="email_to" required>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="enableAlerts" name="enable_alerts" checked>
-                                    <label class="form-check-label" for="enableAlerts">
-                                        Enable Email Alerts
-                                    </label>
-                                </div>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-gear me-2"></i>Create Configuration
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <?php elseif ($step == 3): ?>
-                <!-- Step 3: Database Setup -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-table me-2"></i>
-                            Database Tables Setup
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Create the database tables and API files.</p>
-
-                        <div class="mb-3">
-                            <h6>What will be created:</h6>
-                            <ul class="list-unstyled small">
-                                <li><i class="bi bi-table text-primary me-2"></i>Database tables for companies, jobs, alerts</li>
-                                <li><i class="bi bi-folder text-info me-2"></i>API directory with endpoint files</li>
-                                <li><i class="bi bi-file-code text-success me-2"></i>Basic API endpoints for jobs, stats, companies</li>
-                            </ul>
-                        </div>
-
-                        <form method="post">
-                            <input type="hidden" name="action" value="setup_database">
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-database-add me-2"></i>Create Database Tables & API Files
-                            </button>
-                        </form>
-
-                        <div class="mt-3">
-                            <small class="text-muted">
-                                <strong>Note:</strong> If you get permission errors, you can manually create API files by visiting:
-                                <a href="create-api-files.php" class="text-decoration-none" target="_blank">create-api-files.php</a>
-                            </small>
-                        </div>
-                    </div>
-                </div>
-
-                <?php elseif ($step == 4): ?>
-                <!-- Step 4: Sample Data -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-plus-circle me-2"></i>
-                            Sample Data
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Add sample companies to get started.</p>
-
-                        <form method="post">
-                            <input type="hidden" name="action" value="add_sample_data">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-plus-circle me-2"></i>Add Sample Companies
-                            </button>
-                        </form>
-
-                        <div class="text-center mt-3">
-                            <a href="?step=5" class="btn btn-outline-secondary">
-                                Skip Sample Data
-                            </a>
-                        </div>
-                    </div>
-                </div>
-
-                <?php else: ?>
-                <!-- Step 5: Complete -->
-                <div class="card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">
-                            <i class="bi bi-check-circle me-2"></i>
-                            Setup Complete!
-                        </h5>
-                    </div>
-                    <div class="card-body text-center">
-                        <i class="bi bi-check-circle-fill display-1 text-success mb-3"></i>
-                        <h4>🎉 Congratulations!</h4>
-                        <p class="text-muted mb-4">Your Job Feed Aggregator is ready!</p>
-
-                        <div class="alert alert-info">
-                            <h6><i class="bi bi-info-circle me-2"></i>Cron Job Setup (Optional)</h6>
-                            <p class="mb-2">To automate job monitoring, add this to your cron tab:</p>
-                            <code>*/30 * * * * php <?php echo __DIR__; ?>/scripts/monitor.php</code>
-                            <p class="mb-0 mt-2 small">This will check for new jobs every 30 minutes.</p>
-                        </div>
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                            <a href="index.php" class="btn btn-success btn-lg">
-                                <i class="bi bi-house me-2"></i>Go to Dashboard
-                            </a>
-                            <a href="manage.php" class="btn btn-primary btn-lg">
-                                <i class="bi bi-plus-lg me-2"></i>Add Job Feeds
-                            </a>
-                            <a href="test.php" class="btn btn-outline-info btn-lg">
-                                <i class="bi bi-tools me-2"></i>Test System
-                            </a>
-                        </div>
-
-                        <div class="text-center mt-3">
-                            <small class="text-muted">
-                                Need help? Check the
-                                <a href="#" onclick="showHelp()" class="text-decoration-none">documentation</a>
-                                or
-                                <a href="test.php" class="text-decoration-none">test your setup</a>
-                            </small>
-                        </div>
-                    </div>
-                </div>
                 <?php endif; ?>
 
+                <!-- Step Content -->
+                <?php if ($step == 1): ?>
+                    <!-- Step 1: Configuration -->
+                    <div class="card setup-step">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-gear me-2"></i>
+                                Step 1: Configuration
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <?php if (!$checks['config_dir_writable']): ?>
+                                <div class="alert alert-danger">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    The config directory is not writable. Please set permissions to 755 or 777.
+                                </div>
+                            <?php elseif (!$checks['required_files']): ?>
+                                <div class="alert alert-danger">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    Some required files are missing. Please ensure all files are uploaded.
+                                </div>
+                            <?php else: ?>
+                                <form method="post">
+                                    <input type="hidden" name="action" value="create_config">
+
+                                    <h6>Database Configuration</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Database Host</label>
+                                            <input type="text" class="form-control" name="db_host" value="localhost" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Database Name</label>
+                                            <input type="text" class="form-control" name="db_name" required>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-4">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Database Username</label>
+                                            <input type="text" class="form-control" name="db_user" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Database Password</label>
+                                            <input type="password" class="form-control" name="db_pass">
+                                        </div>
+                                    </div>
+
+                                    <h6>Email Configuration</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-md-8">
+                                            <label class="form-label">SMTP Host</label>
+                                            <input type="text" class="form-control" name="email_host" value="smtp.gmail.com" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">SMTP Port</label>
+                                            <input type="number" class="form-control" name="email_port" value="587" required>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Email Address</label>
+                                            <input type="email" class="form-control" name="email_user" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Email Password</label>
+                                            <input type="password" class="form-control" name="email_pass" required>
+                                            <div class="form-text">Use App Password for Gmail</div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Send Alerts To</label>
+                                        <input type="email" class="form-control" name="email_to" required>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-check me-1"></i>
+                                        Create Configuration
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                <?php elseif ($step == 2): ?>
+                    <!-- Step 2: Database -->
+                    <div class="card setup-step">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-database me-2"></i>
+                                Step 2: Database Setup
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p>Now let's test the database connection and create the required tables.</p>
+
+                            <form method="post">
+                                <input type="hidden" name="action" value="test_database">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-play-circle me-1"></i>
+                                    Test Database Connection
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                <?php elseif ($step == 3): ?>
+                    <!-- Step 3: Verification -->
+                    <div class="card setup-step">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-check-circle me-2"></i>
+                                Step 3: Verification
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p>Let's verify that all components are working correctly.</p>
+
+                            <form method="post">
+                                <input type="hidden" name="action" value="test_complete">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check-all me-1"></i>
+                                    Run Final Tests
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                <?php else: ?>
+                    <!-- Step 4: Complete -->
+                    <div class="card step-complete">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-check-circle me-2"></i>
+                                Setup Complete!
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center py-4">
+                                <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                                <h4 class="mt-3">Job Monitor is Ready!</h4>
+                                <p class="text-muted">Your job monitoring system has been successfully configured.</p>
+
+                                <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+                                    <a href="index.php" class="btn btn-primary">
+                                        <i class="bi bi-house me-1"></i>
+                                        Go to Dashboard
+                                    </a>
+                                    <a href="test.php" class="btn btn-outline-primary">
+                                        <i class="bi bi-tools me-1"></i>
+                                        Test Tool
+                                    </a>
+                                    <a href="debug.php" class="btn btn-outline-secondary">
+                                        <i class="bi bi-bug me-1"></i>
+                                        Debug Info
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <h6>Next Steps:</h6>
+                                <ol>
+                                    <li>Add companies to monitor using the dashboard</li>
+                                    <li>Test job scraping with the test tool</li>
+                                    <li>Set up a cron job to run <code>scripts/monitor.php</code> automatically</li>
+                                </ol>
+
+                                <h6>Cron Job Example:</h6>
+                                <div class="bg-dark text-light p-2 rounded">
+                                    <code># Run every 30 minutes<br>
+                                    */30 * * * * php /path/to/your/job-monitor/scripts/monitor.php</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <!-- System Status -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">System Status</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <div class="<?= $checks['required_files'] ? 'text-success' : 'text-danger' ?>">
+                                    <i class="bi bi-<?= $checks['required_files'] ? 'check-circle' : 'x-circle' ?> fs-4"></i>
+                                    <div>Required Files</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="<?= $checks['config_exists'] ? 'text-success' : 'text-muted' ?>">
+                                    <i class="bi bi-<?= $checks['config_exists'] ? 'check-circle' : 'circle' ?> fs-4"></i>
+                                    <div>Configuration</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="<?= $checks['config_dir_writable'] ? 'text-success' : 'text-danger' ?>">
+                                    <i class="bi bi-<?= $checks['config_dir_writable'] ? 'check-circle' : 'x-circle' ?> fs-4"></i>
+                                    <div>Permissions</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function showHelp() {
-            alert('Quick Help:\n\n' +
-                  '1. Add job feeds in "Manage Feeds"\n' +
-                  '2. Test scraping with "Test System"\n' +
-                  '3. Set up cron job for automation\n' +
-                  '4. Configure email alerts\n\n' +
-                  'For detailed help, check the README file.');
-        }
-    </script>
 </body>
 </html>
-
-<?php
-function testDatabaseConnection($config) {
-    if (empty($config['db_host']) || empty($config['db_name']) || empty($config['db_user'])) {
-        return [
-            'success' => false,
-            'message' => 'Please fill in all required fields'
-        ];
-    }
-
-    try {
-        $dsn = "mysql:host={$config['db_host']};charset=utf8mb4";
-        $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_TIMEOUT => 10
-        ]);
-
-        // Check if database exists
-        $stmt = $pdo->query("SHOW DATABASES LIKE '{$config['db_name']}'");
-        if (!$stmt->fetch()) {
-            $pdo->exec("CREATE DATABASE `{$config['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        }
-
-        // Test connection to the database
-        $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
-        $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-        ]);
-
-        return [
-            'success' => true,
-            'message' => 'Database connection successful!'
-        ];
-
-    } catch (PDOException $e) {
-        return [
-            'success' => false,
-            'message' => 'Database error: ' . $e->getMessage()
-        ];
-    }
-}
-
-function createConfigFile($dbConfig, $emailConfig) {
-    $configContent = "<?php\nreturn [\n";
-    $configContent .= "    'database' => [\n";
-    $configContent .= "        'host' => '" . ($dbConfig['db_host'] ?? 'localhost') . "',\n";
-    $configContent .= "        'name' => '" . ($dbConfig['db_name'] ?? 'job_feed') . "',\n";
-    $configContent .= "        'user' => '" . ($dbConfig['db_user'] ?? '') . "',\n";
-    $configContent .= "        'pass' => '" . ($dbConfig['db_pass'] ?? '') . "'\n";
-    $configContent .= "    ],\n";
-    $configContent .= "    'email' => [\n";
-    $configContent .= "        'host' => 'smtp.gmail.com',\n";
-    $configContent .= "        'port' => 587,\n";
-    $configContent .= "        'user' => '{$emailConfig['email_user']}',\n";
-    $configContent .= "        'pass' => 'your_email_password',\n";
-    $configContent .= "        'to' => '{$emailConfig['email_to']}'\n";
-    $configContent .= "    ]\n";
-    $configContent .= "];\n";
-
-    $configDir = __DIR__ . '/config';
-    if (!is_dir($configDir)) {
-        mkdir($configDir, 0755, true);
-    }
-
-    $configFile = $configDir . '/config.php';
-
-    if (file_put_contents($configFile, $configContent)) {
-        return [
-            'success' => true,
-            'message' => 'Configuration file created!'
-        ];
-    } else {
-        return [
-            'success' => false,
-            'message' => 'Could not create config file'
-        ];
-    }
-}
-
-function setupDatabase() {
-    try {
-        // Create API directory if it doesn't exist
-        $apiDir = __DIR__ . '/api';
-        if (!is_dir($apiDir)) {
-            if (!mkdir($apiDir, 0755, true)) {
-                // Can't create directory - continue anyway
-                error_log("Warning: Could not create API directory");
-            }
-        }
-
-        require_once __DIR__ . '/src/Database.php';
-        $db = new Database();
-
-        // Create tables with better error handling
-        try {
-            $db->createTables();
-            $tableMessage = "Database tables created successfully!";
-        } catch (Exception $e) {
-            $tableMessage = "Database tables created with some warnings. Check error log for details.";
-            error_log("Database table creation warning: " . $e->getMessage());
-        }
-
-        // Create basic API files if possible
-        $apiMessage = "";
-        try {
-            createApiFiles();
-            $apiMessage = " API files created.";
-        } catch (Exception $e) {
-            $apiMessage = " Note: Please manually create API files using create-api-files.php";
-            error_log("API file creation warning: " . $e->getMessage());
-        }
-
-        return [
-            'success' => true,
-            'message' => $tableMessage . $apiMessage
-        ];
-
-    } catch (Exception $e) {
-        return [
-            'success' => false,
-            'message' => 'Database setup failed: ' . $e->getMessage() . '. You may need to create the database manually.'
-        ];
-    }
-}
-
-function createApiFiles() {
-    $apiDir = __DIR__ . '/api';
-
-    // Ensure directory exists
-    if (!is_dir($apiDir) && !mkdir($apiDir, 0755, true)) {
-        throw new Exception("Cannot create API directory");
-    }
-
-    $files = [
-        'jobs.php' => '<?php
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-require_once __DIR__ . "/../src/Database.php";
-try {
-    $db = new Database();
-    $pdo = $db->getConnection();
-    $stmt = $pdo->query("SELECT j.*, c.name as company_name FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.status IN (\'new\', \'existing\') ORDER BY j.first_seen DESC LIMIT 50");
-    $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode([\'success\' => true, \'jobs\' => $jobs]);
-} catch (Exception $e) {
-    echo json_encode([\'success\' => false, \'error\' => $e->getMessage()]);
-}',
-
-        'stats.php' => '<?php
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-require_once __DIR__ . "/../src/Database.php";
-try {
-    $db = new Database();
-    $pdo = $db->getConnection();
-    $stmt = $pdo->query("SELECT COUNT(*) FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.status IN (\'new\', \'existing\') AND c.status = \'active\'");
-    $totalJobs = $stmt->fetchColumn();
-    $stmt = $pdo->query("SELECT COUNT(*) FROM companies WHERE status = \'active\'");
-    $activeCompanies = $stmt->fetchColumn();
-    echo json_encode([\'success\' => true, \'stats\' => [\'total_jobs\' => (int)$totalJobs, \'remote_jobs\' => 0, \'new_jobs\' => 0, \'active_companies\' => (int)$activeCompanies]]);
-} catch (Exception $e) {
-    echo json_encode([\'success\' => false, \'error\' => $e->getMessage()]);
-}',
-
-        'companies.php' => '<?php
-header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-require_once __DIR__ . "/../src/Database.php";
-try {
-    $db = new Database();
-    $pdo = $db->getConnection();
-    $stmt = $pdo->query("SELECT c.*, COUNT(j.id) as job_count FROM companies c LEFT JOIN jobs j ON c.id = j.company_id AND j.status IN (\'new\', \'existing\') GROUP BY c.id ORDER BY c.name");
-    $companies = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($companies as &$company) { $company[\'id\'] = (int)$company[\'id\']; $company[\'job_count\'] = (int)$company[\'job_count\']; }
-    echo json_encode([\'success\' => true, \'companies\' => $companies]);
-} catch (Exception $e) {
-    echo json_encode([\'success\' => false, \'error\' => $e->getMessage()]);
-}'
-    ];
-
-    foreach ($files as $filename => $content) {
-        $filepath = $apiDir . '/' . $filename;
-        if (!file_exists($filepath)) {
-            if (!file_put_contents($filepath, $content)) {
-                throw new Exception("Cannot create $filename");
-            }
-        }
-    }
-}
-
-function addSampleData() {
-    try {
-        require_once __DIR__ . '/src/Database.php';
-        require_once __DIR__ . '/src/Company.php';
-
-        $db = new Database();
-        $company = new Company($db);
-
-        $sampleCompanies = [
-            ['GitHub', 'https://github.com/about/careers', 'a[href*="job"]', 'https://github.com', 'Technology'],
-            ['Netflix', 'https://jobs.netflix.com/', 'a[href*="job"]', 'https://netflix.com', 'Entertainment'],
-            ['Shopify', 'https://www.shopify.com/careers', '.job-listing a', 'https://shopify.com', 'E-commerce']
-        ];
-
-        $added = 0;
-        foreach ($sampleCompanies as $data) {
-            try {
-                $company->add($data[0], $data[1], $data[2], null, null, $data[3], null, $data[4]);
-                $added++;
-            } catch (Exception $e) {
-                // Company might exist already
-            }
-        }
-
-        return [
-            'success' => true,
-            'message' => "Added $added sample companies!"
-        ];
-
-    } catch (Exception $e) {
-        return [
-            'success' => false,
-            'message' => 'Sample data failed: ' . $e->getMessage()
-        ];
-    }
-}
-?>
