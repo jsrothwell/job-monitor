@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result['success']) {
                 $success[] = $result['message'];
                 $_SESSION['db_config'] = $_POST;
+                $step = 2; // Advance to next step
             } else {
                 $errors[] = $result['message'];
             }
@@ -205,6 +206,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
+        <!-- Debug Info (remove in production) -->
+        <?php if (isset($_GET['debug'])): ?>
+        <div class="alert alert-info">
+            <strong>Debug Info:</strong><br>
+            Current Step: <?= $step ?><br>
+            POST Action: <?= $_POST['action'] ?? 'none' ?><br>
+            Session DB Config: <?= !empty($_SESSION['db_config']) ? 'Set' : 'Not set' ?><br>
+            Success Messages: <?= count($success) ?><br>
+            Error Messages: <?= count($errors) ?>
+        </div>
+        <?php endif; ?>
+
         <!-- Step Content -->
         <div class="row">
             <div class="col-lg-8 mx-auto">
@@ -220,6 +233,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div class="card-body">
                         <p class="text-muted">First, let's configure your database connection. Make sure you have created a MySQL database and have the connection details ready.</p>
+
+                        <!-- Pre-flight checks -->
+                        <div class="mb-3">
+                            <h6>System Checks:</h6>
+                            <ul class="list-unstyled small">
+                                <li>
+                                    <i class="bi bi-<?= is_writable(__DIR__) ? 'check-circle text-success' : 'x-circle text-danger' ?> me-2"></i>
+                                    Directory writable: <?= is_writable(__DIR__) ? 'Yes' : 'No' ?>
+                                </li>
+                                <li>
+                                    <i class="bi bi-<?= extension_loaded('pdo_mysql') ? 'check-circle text-success' : 'x-circle text-danger' ?> me-2"></i>
+                                    PDO MySQL: <?= extension_loaded('pdo_mysql') ? 'Available' : 'Missing' ?>
+                                </li>
+                                <li>
+                                    <i class="bi bi-<?= function_exists('mail') ? 'check-circle text-success' : 'x-circle text-danger' ?> me-2"></i>
+                                    Mail function: <?= function_exists('mail') ? 'Available' : 'Missing' ?>
+                                </li>
+                            </ul>
+                        </div>
 
                         <form method="post">
                             <input type="hidden" name="action" value="test_database">
@@ -252,6 +284,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </button>
                             </div>
                         </form>
+
+                        <!-- Show continue button if database test was successful -->
+                        <?php if (!empty($success) && !empty($_SESSION['db_config'])): ?>
+                        <div class="mt-3 text-center">
+                            <a href="?step=2" class="btn btn-success">
+                                <i class="bi bi-arrow-right me-2"></i>Continue to Email Setup
+                            </a>
+                        </div>
+                        <?php else: ?>
+                        <div class="mt-3 text-center">
+                            <a href="?step=2&skip_test=1" class="btn btn-outline-warning btn-sm">
+                                <i class="bi bi-skip-forward me-2"></i>Skip Test (Manual Config)
+                            </a>
+                        </div>
+                        <?php endif;
                     </div>
                 </div>
 
@@ -266,6 +313,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div class="card-body">
                         <p class="text-muted">Configure email settings for job alerts and notifications.</p>
+
+                        <?php if (isset($_GET['skip_test']) && $_GET['skip_test'] == 1): ?>
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>Database test skipped.</strong> Make sure to manually create your config/config.php file with correct database settings.
+                        </div>
+                        <?php endif; ?>
 
                         <form method="post">
                             <input type="hidden" name="action" value="create_config">
@@ -474,21 +528,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <?php
 function testDatabaseConnection($config) {
+    // Validate required fields
+    if (empty($config['db_host']) || empty($config['db_name']) || empty($config['db_user'])) {
+        return [
+            'success' => false,
+            'message' => 'Please fill in all required database fields (host, name, user)'
+        ];
+    }
+
     try {
+        $dsn = "mysql:host={$config['db_host']};charset=utf8mb4";
+
+        // First test basic connection to MySQL server
+        $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_TIMEOUT => 5
+        ]);
+
+        // Check if database exists, if not try to create it
+        $stmt = $pdo->query("SHOW DATABASES LIKE '{$config['db_name']}'");
+        if (!$stmt->fetch()) {
+            // Try to create the database
+            $pdo->exec("CREATE DATABASE `{$config['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        }
+
+        // Now connect to the specific database
         $dsn = "mysql:host={$config['db_host']};dbname={$config['db_name']};charset=utf8mb4";
         $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
         ]);
 
+        // Test if we can create tables (check permissions)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS test_permissions (id INT) ENGINE=InnoDB");
+        $pdo->exec("DROP TABLE IF EXISTS test_permissions");
+
         return [
             'success' => true,
-            'message' => 'Database connection successful! Ready to proceed with configuration.'
+            'message' => 'Database connection successful! Database "' . $config['db_name'] . '" is ready.'
         ];
 
     } catch (PDOException $e) {
+        $errorMessage = 'Database connection failed: ';
+
+        if (strpos($e->getMessage(), 'Access denied') !== false) {
+            $errorMessage .= 'Invalid username or password';
+        } elseif (strpos($e->getMessage(), 'Unknown database') !== false) {
+            $errorMessage .= 'Database "' . $config['db_name'] . '" does not exist and could not be created';
+        } elseif (strpos($e->getMessage(), 'Connection refused') !== false) {
+            $errorMessage .= 'Cannot connect to MySQL server at ' . $config['db_host'];
+        } else {
+            $errorMessage .= $e->getMessage();
+        }
+
         return [
             'success' => false,
-            'message' => 'Database connection failed: ' . $e->getMessage()
+            'message' => $errorMessage
         ];
     }
 }
