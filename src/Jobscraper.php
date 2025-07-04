@@ -32,9 +32,10 @@ class JobScraper {
 
     public function scrapeCompany($companyData) {
         $url = $companyData['careers_url'];
-        $selector = $companyData['selector'] ?: 'a';
-        $locationSelector = $companyData['location_selector'];
-        $descriptionSelector = $companyData['description_selector'];
+        // Use the null coalescing operator (??) to prevent undefined key warnings
+        $selector = $companyData['selector'] ?? 'a';
+        $locationSelector = $companyData['location_selector'] ?? null;
+        $descriptionSelector = $companyData['description_selector'] ?? null;
 
         try {
             $html = $this->fetchPage($url);
@@ -224,7 +225,7 @@ class JobScraper {
         // Skip if contains job-related words
         $jobWords = ['job', 'position', 'role', 'apply', 'salary', 'experience'];
         foreach ($jobWords as $word) {
-            if (strpos($text, $word) !== false) return false;
+            if (str_contains($text, $word)) return false; // Using PHP 8 str_contains
         }
 
         // Look for location patterns
@@ -244,11 +245,11 @@ class JobScraper {
     }
 
     private function detectJobType($title, $description) {
-        $text = strtolower($title . ' ' . $description);
+        $text = strtolower($title . ' ' . ($description ?? ''));
 
         foreach ($this->jobTypeKeywords as $type => $keywords) {
             foreach ($keywords as $keyword) {
-                if (strpos($text, $keyword) !== false) {
+                if (str_contains($text, $keyword)) { // Using PHP 8 str_contains
                     return $type;
                 }
             }
@@ -258,10 +259,10 @@ class JobScraper {
     }
 
     private function detectRemote($title, $location, $description) {
-        $text = strtolower($title . ' ' . $location . ' ' . $description);
+        $text = strtolower($title . ' ' . ($location ?? '') . ' ' . ($description ?? ''));
 
         foreach ($this->remoteKeywords as $keyword) {
-            if (strpos($text, $keyword) !== false) {
+            if (str_contains($text, $keyword)) { // Using PHP 8 str_contains
                 return true;
             }
         }
@@ -270,11 +271,11 @@ class JobScraper {
     }
 
     private function detectExperienceLevel($title, $description) {
-        $text = strtolower($title . ' ' . $description);
+        $text = strtolower($title . ' ' . ($description ?? ''));
 
         foreach ($this->experienceKeywords as $level => $keywords) {
             foreach ($keywords as $keyword) {
-                if (strpos($text, $keyword) !== false) {
+                if (str_contains($text, $keyword)) { // Using PHP 8 str_contains
                     return $level;
                 }
             }
@@ -284,7 +285,7 @@ class JobScraper {
     }
 
     private function detectDepartment($title, $description) {
-        $text = strtolower($title . ' ' . $description);
+        $text = strtolower($title . ' ' . ($description ?? ''));
 
         $departments = [
             'engineering' => ['engineer', 'developer', 'software', 'technical', 'backend', 'frontend', 'devops'],
@@ -301,7 +302,7 @@ class JobScraper {
 
         foreach ($departments as $dept => $keywords) {
             foreach ($keywords as $keyword) {
-                if (strpos($text, $keyword) !== false) {
+                if (str_contains($text, $keyword)) { // Using PHP 8 str_contains
                     return $dept;
                 }
             }
@@ -311,7 +312,7 @@ class JobScraper {
     }
 
     private function extractSalary($title, $description) {
-        $text = $title . ' ' . $description;
+        $text = $title . ' ' . ($description ?? '');
 
         // Look for salary patterns
         $patterns = [
@@ -365,11 +366,11 @@ class JobScraper {
         $baseScheme = $base['scheme'] ?? 'https';
         $baseHost = $base['host'] ?? '';
 
-        if (strpos($href, '//') === 0) {
+        if (str_starts_with($href, '//')) { // Using PHP 8 str_starts_with
             return $baseScheme . ':' . $href;
         }
 
-        if (strpos($href, '/') === 0) {
+        if (str_starts_with($href, '/')) { // Using PHP 8 str_starts_with
             return $baseScheme . '://' . $baseHost . $href;
         }
 
