@@ -1,7 +1,12 @@
 <?php
-// index.php - Main Application Interface
+// index.php - Main Application Interface (PHP 5.6+ Compatible)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
+// Check PHP version first
+if (version_compare(PHP_VERSION, '5.6.0', '<')) {
+    die('This application requires PHP 5.6 or higher. You are running PHP ' . PHP_VERSION);
+}
 
 // Initialize variables
 $message = '';
@@ -9,18 +14,18 @@ $messageType = '';
 $runResults = null;
 
 // Check if required files exist
-$requiredFiles = [
+$requiredFiles = array(
     'src/Database.php',
     'src/Company.php',
     'src/JobScraper.php',
     'src/Emailer.php',
     'src/JobMonitor.php',
     'config/config.php'
-];
+);
 
 foreach ($requiredFiles as $file) {
     if (!file_exists(__DIR__ . '/' . $file)) {
-        die("❌ Missing required file: $file");
+        die("Missing required file: $file");
     }
 }
 
@@ -39,7 +44,7 @@ try {
     $monitor = new JobMonitor();
 
 } catch (Exception $e) {
-    die("❌ Initialization error: " . $e->getMessage());
+    die("Initialization error: " . $e->getMessage());
 }
 
 // Handle form submissions
@@ -68,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 case 'run_monitor':
                     $runResults = $monitor->runManual();
-                    $message = "Monitoring completed! Checked {$runResults['companies_checked']} companies, found {$runResults['total_new_jobs']} new jobs.";
+                    $message = "Monitoring completed! Checked " . $runResults['companies_checked'] . " companies, found " . $runResults['total_new_jobs'] . " new jobs.";
                     $messageType = $runResults['total_new_jobs'] > 0 ? 'success' : 'info';
                     break;
 
@@ -97,13 +102,18 @@ try {
     $stats = $monitor->getStats();
     $recentJobs = $monitor->getRecentJobs(5);
 } catch (Exception $e) {
-    $companies = [];
-    $stats = [];
-    $recentJobs = [];
+    $companies = array();
+    $stats = array();
+    $recentJobs = array();
     if (empty($message)) {
         $message = "Warning: " . $e->getMessage();
         $messageType = 'warning';
     }
+}
+
+// Safely get values with fallbacks for older PHP
+function getValue($array, $key, $default = 0) {
+    return isset($array[$key]) ? $array[$key] : $default;
 }
 ?>
 
@@ -114,12 +124,20 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Monitor Dashboard</title>
 
+    <!-- Google Fonts - Libre Franklin -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
+        body {
+            font-family: 'Libre Franklin', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
         .hero-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -132,6 +150,13 @@ try {
         }
         .job-item {
             border-left: 4px solid #007bff;
+        }
+        .navbar-brand, .card-title, .display-5 {
+            font-weight: 600;
+        }
+        .h1, .h2, .h3, .h4, .h5, .h6, h1, h2, h3, h4, h5, h6 {
+            font-family: 'Libre Franklin', sans-serif;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -147,6 +172,10 @@ try {
                 <a class="nav-link" href="test.php">
                     <i class="bi bi-tools me-1"></i>
                     Test Tool
+                </a>
+                <a class="nav-link" href="debug.php">
+                    <i class="bi bi-bug me-1"></i>
+                    Debug
                 </a>
             </div>
         </div>
@@ -164,29 +193,32 @@ try {
             <!-- Quick Stats -->
             <div class="row justify-content-center">
                 <div class="col-md-3 col-6 mb-3">
-                    <div class="bg-white bg-opacity-20 rounded p-3">
-                        <div class="h4 mb-1"><?= $stats['active_companies'] ?? 0 ?></div>
-                        <small>Active Companies</small>
+                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
+                        <div class="h3 mb-1 text-primary fw-bold"><?php echo getValue($stats, 'active_companies'); ?></div>
+                        <small class="text-light">Active Companies</small>
                     </div>
                 </div>
                 <div class="col-md-3 col-6 mb-3">
-                    <div class="bg-white bg-opacity-20 rounded p-3">
-                        <div class="h4 mb-1"><?= $stats['total_jobs'] ?? 0 ?></div>
-                        <small>Total Jobs Tracked</small>
+                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
+                        <div class="h3 mb-1 text-success fw-bold"><?php echo getValue($stats, 'total_jobs'); ?></div>
+                        <small class="text-light">Total Jobs Tracked</small>
                     </div>
                 </div>
                 <div class="col-md-3 col-6 mb-3">
-                    <div class="bg-white bg-opacity-20 rounded p-3">
-                        <div class="h4 mb-1"><?= $stats['new_jobs_today'] ?? 0 ?></div>
-                        <small>New Today</small>
+                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
+                        <div class="h3 mb-1 text-warning fw-bold"><?php echo getValue($stats, 'new_jobs_today'); ?></div>
+                        <small class="text-light">New Today</small>
                     </div>
                 </div>
                 <div class="col-md-3 col-6 mb-3">
-                    <div class="bg-white bg-opacity-20 rounded p-3">
-                        <div class="h4 mb-1">
-                            <?= $stats['last_run'] ? date('H:i', strtotime($stats['last_run'])) : 'Never' ?>
+                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
+                        <div class="h3 mb-1 text-info fw-bold">
+                            <?php
+                            $lastRun = getValue($stats, 'last_run', null);
+                            echo $lastRun ? date('H:i', strtotime($lastRun)) : 'Never';
+                            ?>
                         </div>
-                        <small>Last Check</small>
+                        <small class="text-light">Last Check</small>
                     </div>
                 </div>
             </div>
@@ -196,9 +228,9 @@ try {
     <div class="container py-4">
         <!-- Messages -->
         <?php if ($message): ?>
-            <div class="alert alert-<?= $messageType ?> alert-dismissible fade show" role="alert">
-                <i class="bi bi-<?= $messageType === 'success' ? 'check-circle' : ($messageType === 'danger' ? 'exclamation-triangle' : 'info-circle') ?> me-2"></i>
-                <?= htmlspecialchars($message) ?>
+            <div class="alert alert-<?php echo $messageType; ?> alert-dismissible fade show" role="alert">
+                <i class="bi bi-<?php echo $messageType === 'success' ? 'check-circle' : ($messageType === 'danger' ? 'exclamation-triangle' : 'info-circle'); ?> me-2"></i>
+                <?php echo htmlspecialchars($message); ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
@@ -266,19 +298,19 @@ try {
                         <?php if ($runResults): ?>
                             <div class="row text-center mb-3">
                                 <div class="col-3">
-                                    <div class="h5 text-primary"><?= $runResults['companies_checked'] ?></div>
+                                    <div class="h5 text-primary"><?php echo $runResults['companies_checked']; ?></div>
                                     <small class="text-muted">Companies</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h5 text-success"><?= $runResults['total_new_jobs'] ?></div>
+                                    <div class="h5 text-success"><?php echo $runResults['total_new_jobs']; ?></div>
                                     <small class="text-muted">New Jobs</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h5 text-info"><?= $runResults['emails_sent'] ?></div>
+                                    <div class="h5 text-info"><?php echo $runResults['emails_sent']; ?></div>
                                     <small class="text-muted">Emails Sent</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h5 text-warning"><?= $runResults['duration'] ?>s</div>
+                                    <div class="h5 text-warning"><?php echo $runResults['duration']; ?>s</div>
                                     <small class="text-muted">Duration</small>
                                 </div>
                             </div>
@@ -295,12 +327,12 @@ try {
                                             <div class="accordion-body">
                                                 <?php foreach ($runResults['details'] as $companyName => $result): ?>
                                                     <div class="mb-2">
-                                                        <strong><?= htmlspecialchars($companyName) ?>:</strong>
-                                                        <span class="badge bg-<?= $result['success'] ? 'success' : 'danger' ?>">
-                                                            <?= $result['success'] ? $result['new_jobs'] . ' new jobs' : 'Failed' ?>
+                                                        <strong><?php echo htmlspecialchars($companyName); ?>:</strong>
+                                                        <span class="badge bg-<?php echo $result['success'] ? 'success' : 'danger'; ?>">
+                                                            <?php echo $result['success'] ? $result['new_jobs'] . ' new jobs' : 'Failed'; ?>
                                                         </span>
                                                         <?php if (!$result['success']): ?>
-                                                            <small class="text-muted d-block"><?= htmlspecialchars($result['error']) ?></small>
+                                                            <small class="text-muted d-block"><?php echo htmlspecialchars($result['error']); ?></small>
                                                         <?php endif; ?>
                                                     </div>
                                                 <?php endforeach; ?>
@@ -329,16 +361,16 @@ try {
                                 <div class="job-item bg-light p-3 mb-2 rounded">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
-                                            <h6 class="mb-1"><?= htmlspecialchars($job['title']) ?></h6>
+                                            <h6 class="mb-1"><?php echo htmlspecialchars($job['title']); ?></h6>
                                             <small class="text-muted">
                                                 <i class="bi bi-building me-1"></i>
-                                                <?= htmlspecialchars($job['company_name']) ?>
+                                                <?php echo htmlspecialchars($job['company_name']); ?>
                                                 <i class="bi bi-calendar ms-3 me-1"></i>
-                                                <?= date('M j, Y', strtotime($job['first_seen'])) ?>
+                                                <?php echo date('M j, Y', strtotime($job['first_seen'])); ?>
                                             </small>
                                         </div>
                                         <?php if (!empty($job['url'])): ?>
-                                            <a href="<?= htmlspecialchars($job['url']) ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                            <a href="<?php echo htmlspecialchars($job['url']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">
                                                 <i class="bi bi-arrow-up-right-square"></i>
                                             </a>
                                         <?php endif; ?>
@@ -363,7 +395,7 @@ try {
                     <div class="card-header">
                         <h5 class="card-title mb-0">
                             <i class="bi bi-buildings me-2"></i>
-                            Monitored Companies (<?= count($companies) ?>)
+                            Monitored Companies (<?php echo count($companies); ?>)
                         </h5>
                     </div>
                     <div class="card-body">
@@ -383,31 +415,31 @@ try {
                                         <?php foreach ($companies as $comp): ?>
                                             <tr>
                                                 <td>
-                                                    <strong><?= htmlspecialchars($comp['name']) ?></strong>
+                                                    <strong><?php echo htmlspecialchars($comp['name']); ?></strong>
                                                     <?php if (!empty($comp['selector'])): ?>
-                                                        <br><small class="text-muted">Selector: <?= htmlspecialchars($comp['selector']) ?></small>
+                                                        <br><small class="text-muted">Selector: <?php echo htmlspecialchars($comp['selector']); ?></small>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <a href="<?= htmlspecialchars($comp['careers_url']) ?>" target="_blank" class="text-decoration-none">
-                                                        <?= parse_url($comp['careers_url'], PHP_URL_HOST) ?>
+                                                    <a href="<?php echo htmlspecialchars($comp['careers_url']); ?>" target="_blank" class="text-decoration-none">
+                                                        <?php echo parse_url($comp['careers_url'], PHP_URL_HOST); ?>
                                                         <i class="bi bi-arrow-up-right-square ms-1"></i>
                                                     </a>
                                                 </td>
                                                 <td>
-                                                    <span class="badge bg-<?= $comp['status'] === 'active' ? 'success' : 'secondary' ?>">
-                                                        <?= ucfirst($comp['status']) ?>
+                                                    <span class="badge bg-<?php echo $comp['status'] === 'active' ? 'success' : 'secondary'; ?>">
+                                                        <?php echo ucfirst($comp['status']); ?>
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <?= $comp['last_checked'] ? date('M j, H:i', strtotime($comp['last_checked'])) : 'Never' ?>
+                                                    <?php echo $comp['last_checked'] ? date('M j, H:i', strtotime($comp['last_checked'])) : 'Never'; ?>
                                                 </td>
                                                 <td>
                                                     <div class="btn-group btn-group-sm">
-                                                        <a href="test.php?company_id=<?= $comp['id'] ?>" class="btn btn-outline-primary">
+                                                        <a href="test.php?company_id=<?php echo $comp['id']; ?>" class="btn btn-outline-primary">
                                                             <i class="bi bi-play"></i>
                                                         </a>
-                                                        <button type="button" class="btn btn-outline-danger" onclick="deleteCompany(<?= $comp['id'] ?>, '<?= htmlspecialchars($comp['name']) ?>')">
+                                                        <button type="button" class="btn btn-outline-danger" onclick="deleteCompany(<?php echo $comp['id']; ?>, '<?php echo htmlspecialchars($comp['name']); ?>')">
                                                             <i class="bi bi-trash"></i>
                                                         </button>
                                                     </div>
@@ -466,7 +498,7 @@ try {
 
         // Add loading states
         document.getElementById('addCompanyForm').addEventListener('submit', function() {
-            const btn = this.querySelector('button[type="submit"]');
+            var btn = this.querySelector('button[type="submit"]');
             btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
             btn.disabled = true;
         });

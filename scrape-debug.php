@@ -254,14 +254,34 @@ function analyzeContent($html, $url) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scraping Debugger - Job Monitor</title>
+    <!-- Google Fonts - Libre Franklin -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        body {
+            font-family: 'Libre Franklin', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
         .test-success { background-color: #d1e7dd; }
         .test-warning { background-color: #fff3cd; }
         .test-danger { background-color: #f8d7da; }
-        .code-block { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; }
+        .code-block {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+        }
         .step-card { margin-bottom: 1rem; }
+        .navbar-brand, .card-title, .h3, .h4 {
+            font-weight: 600;
+        }
+        .h1, .h2, .h3, .h4, .h5, .h6, h1, h2, h3, h4, h5, h6 {
+            font-family: 'Libre Franklin', sans-serif;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body class="bg-light">

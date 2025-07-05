@@ -130,12 +130,20 @@ if (!$initError && empty($missingFiles)) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Monitor - Test Tool</title>
 
+    <!-- Google Fonts - Libre Franklin -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
+        body {
+            font-family: 'Libre Franklin', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
         .hero-section {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -146,6 +154,13 @@ if (!$initError && empty($missingFiles)) {
             border-radius: 0.375rem;
             max-height: 400px;
             overflow-y: auto;
+        }
+        .navbar-brand, .card-title, .h3 {
+            font-weight: 600;
+        }
+        .h1, .h2, .h3, .h4, .h5, .h6, h1, h2, h3, h4, h5, h6 {
+            font-family: 'Libre Franklin', sans-serif;
+            font-weight: 600;
         }
     </style>
 </head>
