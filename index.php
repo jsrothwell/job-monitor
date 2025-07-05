@@ -1,5 +1,5 @@
 <?php
-// index.php - Main Application Interface with Timeout Protection
+// index.php - Standalone version (no API required)
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -11,6 +11,7 @@ if (version_compare(PHP_VERSION, '5.6.0', '<')) {
 // Initialize variables
 $message = '';
 $messageType = '';
+$runResults = null;
 
 // Check if required files exist
 $requiredFiles = array(
@@ -67,6 +68,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
                         $message = "Please fill in all required fields.";
                         $messageType = 'warning';
+                    }
+                    break;
+
+                case 'run_monitor':
+                    // Use the simple manual run with timeout protection
+                    set_time_limit(120); // 2 minute limit
+
+                    try {
+                        $runResults = $monitor->runManual();
+                        $message = "Monitoring completed! Checked {$runResults['companies_checked']} companies, found {$runResults['total_new_jobs']} new jobs in {$runResults['duration']} seconds.";
+                        $messageType = $runResults['total_new_jobs'] > 0 ? 'success' : 'info';
+                    } catch (Exception $e) {
+                        $message = "Monitoring error: " . $e->getMessage();
+                        $messageType = 'danger';
                     }
                     break;
 
@@ -165,10 +180,6 @@ function getValue($array, $key, $default = 0) {
                 <a class="nav-link" href="test.php">
                     <i class="bi bi-tools me-1"></i>
                     Test Tool
-                </a>
-                <a class="nav-link" href="scrape-debug.php">
-                    <i class="bi bi-bug me-1"></i>
-                    Debug
                 </a>
             </div>
         </div>
@@ -279,57 +290,91 @@ function getValue($array, $key, $default = 0) {
                             <i class="bi bi-play-circle me-2"></i>
                             Manual Run
                         </h5>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-light btn-sm" id="quickTestBtn" onclick="runQuickTest()">
-                                <i class="bi bi-lightning me-1"></i>
-                                Quick Test
-                            </button>
-                            <button type="button" class="btn btn-light btn-sm" id="runBtn" onclick="startManualRun()">
+                        <form method="post" class="d-inline" id="manualRunForm">
+                            <input type="hidden" name="action" value="run_monitor">
+                            <button type="submit" class="btn btn-light btn-sm" id="runBtn">
                                 <i class="bi bi-play me-1"></i>
-                                Run All
+                                Run Now
                             </button>
-                        </div>
+                        </form>
                     </div>
                     <div class="card-body">
-                        <!-- Progress Section -->
-                        <div id="progressSection" style="display: none;">
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span id="progressStatus">Starting...</span>
-                                    <span id="progressTime">0s</span>
+                        <!-- Loading State -->
+                        <div id="loadingState" style="display: none;">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary mb-3" role="status">
+                                    <span class="visually-hidden">Loading...</span>
                                 </div>
-                                <div class="progress" style="height: 8px;">
-                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                         id="progressBar" role="progressbar" style="width: 0%"></div>
-                                </div>
-                                <small class="text-muted" id="progressDetails">Initializing...</small>
-                            </div>
-
-                            <!-- Live Results -->
-                            <div id="liveResults" class="mt-3" style="display: none;">
-                                <h6>Live Results:</h6>
-                                <div id="companyResults"></div>
-                            </div>
-                        </div>
-
-                        <!-- Default Message -->
-                        <div id="defaultMessage">
-                            <p class="text-muted mb-3">Monitor your companies for new job postings:</p>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <i class="bi bi-lightning text-warning me-2"></i>
-                                        <strong>Quick Test:</strong> Tests first company only (10 seconds)
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <i class="bi bi-play text-primary me-2"></i>
-                                        <strong>Run All:</strong> Checks all companies (1-3 minutes)
-                                    </div>
+                                <h6 class="text-primary">Monitoring in Progress...</h6>
+                                <p class="text-muted mb-0">
+                                    Checking companies for new job postings. This may take 1-3 minutes depending on the number of companies.
+                                </p>
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Please wait while we scrape job listings from your companies...
+                                    </small>
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($runResults): ?>
+                            <div class="row text-center mb-3">
+                                <div class="col-3">
+                                    <div class="h5 text-primary"><?php echo $runResults['companies_checked']; ?></div>
+                                    <small class="text-muted">Companies</small>
+                                </div>
+                                <div class="col-3">
+                                    <div class="h5 text-success"><?php echo $runResults['total_new_jobs']; ?></div>
+                                    <small class="text-muted">New Jobs</small>
+                                </div>
+                                <div class="col-3">
+                                    <div class="h5 text-info"><?php echo $runResults['emails_sent']; ?></div>
+                                    <small class="text-muted">Emails Sent</small>
+                                </div>
+                                <div class="col-3">
+                                    <div class="h5 text-warning"><?php echo $runResults['duration']; ?>s</div>
+                                    <small class="text-muted">Duration</small>
+                                </div>
+                            </div>
+
+                            <?php if (!empty($runResults['details'])): ?>
+                                <div class="accordion" id="runResultsAccordion">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#runDetails">
+                                                View Detailed Results
+                                            </button>
+                                        </h2>
+                                        <div id="runDetails" class="accordion-collapse collapse" data-bs-parent="#runResultsAccordion">
+                                            <div class="accordion-body">
+                                                <?php foreach ($runResults['details'] as $companyName => $result): ?>
+                                                    <div class="mb-2">
+                                                        <strong><?php echo htmlspecialchars($companyName); ?>:</strong>
+                                                        <span class="badge bg-<?php echo $result['success'] ? 'success' : 'danger'; ?>">
+                                                            <?php echo $result['success'] ? $result['new_jobs'] . ' new jobs' : 'Failed'; ?>
+                                                        </span>
+                                                        <?php if (!$result['success']): ?>
+                                                            <small class="text-muted d-block"><?php echo htmlspecialchars($result['error']); ?></small>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <div id="defaultMessage">
+                                <p class="text-muted mb-0">Click "Run Now" to check all companies for new job postings immediately.</p>
+                                <div class="mt-2">
+                                    <small class="text-info">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Monitoring typically takes 1-3 minutes depending on the number of companies you've added.
+                                    </small>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -476,202 +521,10 @@ function getValue($array, $key, $default = 0) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        let startTime;
-        let progressTimer;
-
         function deleteCompany(id, name) {
             document.getElementById('deleteCompanyId').value = id;
             document.getElementById('deleteCompanyName').textContent = name;
             new bootstrap.Modal(document.getElementById('deleteModal')).show();
-        }
-
-        function runQuickTest() {
-            const quickTestBtn = document.getElementById('quickTestBtn');
-            const progressSection = document.getElementById('progressSection');
-            const defaultMessage = document.getElementById('defaultMessage');
-
-            // Update UI
-            quickTestBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Testing...';
-            quickTestBtn.disabled = true;
-
-            defaultMessage.style.display = 'none';
-            progressSection.style.display = 'block';
-
-            updateProgress('Testing first company...', 'Quick test in progress...', 50);
-
-            startTime = Date.now();
-            startProgressTimer();
-
-            // Test API first
-            fetch('api-monitor-robust.php?action=test')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-                    // API works, run quick test
-                    return fetch('api-monitor-robust.php?action=quick_test');
-                })
-                .then(response => response.json())
-                .then(data => {
-                    clearInterval(progressTimer);
-
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    const result = data.test_result;
-                    updateProgress('Test completed!', `${result.company}: ${result.success ? 'Success' : 'Failed'}`, 100);
-
-                    showQuickTestResult(result);
-
-                    setTimeout(() => {
-                        resetButtons();
-                        hideProgress();
-                    }, 5000);
-                })
-                .catch(error => {
-                    clearInterval(progressTimer);
-                    console.error('Quick test failed:', error);
-                    updateProgress('Test failed', error.message, 0);
-                    document.getElementById('progressBar').classList.add('bg-danger');
-
-                    setTimeout(() => {
-                        resetButtons();
-                        hideProgress();
-                    }, 5000);
-                });
-        }
-
-        function startManualRun() {
-            const runBtn = document.getElementById('runBtn');
-            const progressSection = document.getElementById('progressSection');
-            const defaultMessage = document.getElementById('defaultMessage');
-
-            // Update UI
-            runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
-            runBtn.disabled = true;
-
-            defaultMessage.style.display = 'none';
-            progressSection.style.display = 'block';
-            document.getElementById('liveResults').style.display = 'block';
-
-            updateProgress('Starting monitoring...', 'Connecting to companies...', 10);
-
-            startTime = Date.now();
-            startProgressTimer();
-
-            // Test API first
-            fetch('api-monitor-robust.php?action=test')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-                    updateProgress('Running full monitoring...', 'Checking all companies...', 20);
-
-                    // Run full monitoring
-                    return fetch('api-monitor-robust.php?action=run');
-                })
-                .then(response => response.json())
-                .then(data => {
-                    clearInterval(progressTimer);
-
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    const results = data.results;
-                    updateProgress('Monitoring completed!', data.message, 100);
-
-                    showFullResults(results);
-
-                    setTimeout(() => {
-                        resetButtons();
-                        if (results.total_new_jobs > 0) {
-                            setTimeout(() => location.reload(), 2000);
-                        }
-                    }, 5000);
-                })
-                .catch(error => {
-                    clearInterval(progressTimer);
-                    console.error('Monitoring failed:', error);
-                    updateProgress('Monitoring failed', error.message, 0);
-                    document.getElementById('progressBar').classList.add('bg-danger');
-
-                    setTimeout(() => {
-                        resetButtons();
-                        hideProgress();
-                    }, 5000);
-                });
-        }
-
-        function updateProgress(status, details, percent) {
-            document.getElementById('progressStatus').textContent = status;
-            document.getElementById('progressDetails').textContent = details;
-            document.getElementById('progressBar').style.width = percent + '%';
-        }
-
-        function startProgressTimer() {
-            progressTimer = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                document.getElementById('progressTime').textContent = elapsed + 's';
-            }, 1000);
-        }
-
-        function showQuickTestResult(result) {
-            const resultsDiv = document.getElementById('companyResults');
-            resultsDiv.innerHTML = `
-                <div class="alert alert-${result.success ? 'success' : 'warning'} alert-sm">
-                    <strong>${result.company}:</strong>
-                    ${result.success ? `✅ Found ${result.job_count} jobs` : `❌ ${result.error || 'Failed to scrape'}`}
-                    <small class="d-block">Duration: ${result.duration}s</small>
-                </div>
-            `;
-        }
-
-        function showFullResults(results) {
-            const resultsDiv = document.getElementById('companyResults');
-            let html = `
-                <div class="alert alert-info alert-sm mb-2">
-                    <strong>Summary:</strong> ${results.companies_checked} companies checked,
-                    ${results.total_new_jobs} new jobs found, ${results.errors} errors
-                </div>
-            `;
-
-            if (results.details) {
-                Object.keys(results.details).forEach(company => {
-                    const detail = results.details[company];
-                    html += `
-                        <div class="alert alert-${detail.success ? 'success' : 'warning'} alert-sm">
-                            <strong>${company}:</strong>
-                            ${detail.success ? `✅ ${detail.new_jobs} new jobs` : `❌ ${detail.error}`}
-                            <small class="d-block">Duration: ${detail.duration}s</small>
-                        </div>
-                    `;
-                });
-            }
-
-            resultsDiv.innerHTML = html;
-        }
-
-        function resetButtons() {
-            const runBtn = document.getElementById('runBtn');
-            const quickTestBtn = document.getElementById('quickTestBtn');
-
-            runBtn.innerHTML = '<i class="bi bi-play me-1"></i>Run All';
-            runBtn.disabled = false;
-
-            quickTestBtn.innerHTML = '<i class="bi bi-lightning me-1"></i>Quick Test';
-            quickTestBtn.disabled = false;
-        }
-
-        function hideProgress() {
-            setTimeout(() => {
-                document.getElementById('progressSection').style.display = 'none';
-                document.getElementById('defaultMessage').style.display = 'block';
-                document.getElementById('progressBar').classList.remove('bg-danger');
-            }, 3000);
         }
 
         // Add loading states for forms
@@ -681,11 +534,22 @@ function getValue($array, $key, $default = 0) {
             btn.disabled = true;
         });
 
-        // Debug: Test API on page load
-        fetch('api-monitor-robust.php?action=test')
-            .then(response => response.json())
-            .then(data => console.log('API test successful:', data))
-            .catch(error => console.log('API test failed:', error));
+        document.getElementById('manualRunForm').addEventListener('submit', function() {
+            // Hide default message and show loading state
+            const defaultMessage = document.getElementById('defaultMessage');
+            const loadingState = document.getElementById('loadingState');
+            const runBtn = document.getElementById('runBtn');
+
+            if (defaultMessage) defaultMessage.style.display = 'none';
+            loadingState.style.display = 'block';
+
+            // Update button
+            runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
+            runBtn.disabled = true;
+
+            // Show user what's happening
+            console.log('Manual monitoring started...');
+        });
     </script>
 </body>
 </html>
