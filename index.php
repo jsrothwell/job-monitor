@@ -1,736 +1,153 @@
 <?php
-// index.php - Main Application Interface with Improved API Error Handling
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// diagnostic.php - Find where RobustJobMonitor is referenced
+echo "<h1>Job Monitor Diagnostic Tool</h1>";
+echo "<p>This tool will help find where 'RobustJobMonitor' is incorrectly referenced.</p>";
 
-// Check PHP version first
-if (version_compare(PHP_VERSION, '5.6.0', '<')) {
-    die('This application requires PHP 5.6 or higher. You are running PHP ' . PHP_VERSION);
+$searchTerm = 'RobustJobMonitor';
+$correctTerm = 'JobMonitor';
+$rootDir = __DIR__;
+
+function scanDirectory($dir, $searchTerm) {
+    $results = [];
+
+    if (!is_dir($dir)) {
+        return $results;
+    }
+
+    $files = scandir($dir);
+
+    foreach ($files as $file) {
+        if ($file === '.' || $file === '..') continue;
+
+        $fullPath = $dir . DIRECTORY_SEPARATOR . $file;
+
+        if (is_dir($fullPath) && !in_array($file, ['vendor', 'node_modules', '.git', 'cache', 'logs'])) {
+            $results = array_merge($results, scanDirectory($fullPath, $searchTerm));
+        } elseif (is_file($fullPath) && pathinfo($fullPath, PATHINFO_EXTENSION) === 'php') {
+            $content = file_get_contents($fullPath);
+            if (stripos($content, $searchTerm) !== false) {
+                $lines = explode("\n", $content);
+                $matches = [];
+
+                foreach ($lines as $lineNum => $line) {
+                    if (stripos($line, $searchTerm) !== false) {
+                        $matches[] = [
+                            'line' => $lineNum + 1,
+                            'content' => trim($line)
+                        ];
+                    }
+                }
+
+                if (!empty($matches)) {
+                    $results[] = [
+                        'file' => $fullPath,
+                        'matches' => $matches
+                    ];
+                }
+            }
+        }
+    }
+
+    return $results;
 }
 
-// Initialize variables
-$message = '';
-$messageType = '';
+echo "<h2>Scanning for '$searchTerm'...</h2>";
 
-// Check if required files exist
-$requiredFiles = array(
+$results = scanDirectory($rootDir, $searchTerm);
+
+if (empty($results)) {
+    echo "<div style='background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 10px 0;'>";
+    echo "<h3 style='color: #155724;'>✅ Good News!</h3>";
+    echo "<p>No references to '$searchTerm' found in your PHP files.</p>";
+    echo "<p>The error might be coming from:</p>";
+    echo "<ul>";
+    echo "<li>Cached files (try clearing browser cache)</li>";
+    echo "<li>A different version of a file</li>";
+    echo "<li>Another script calling your code</li>";
+    echo "</ul>";
+    echo "</div>";
+} else {
+    echo "<div style='background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin: 10px 0;'>";
+    echo "<h3 style='color: #721c24;'>❌ Found " . count($results) . " file(s) with '$searchTerm'</h3>";
+
+    foreach ($results as $result) {
+        echo "<div style='margin: 15px 0; padding: 10px; background: white; border-left: 4px solid #dc3545;'>";
+        echo "<h4>File: " . htmlspecialchars($result['file']) . "</h4>";
+
+        foreach ($result['matches'] as $match) {
+            echo "<p><strong>Line {$match['line']}:</strong></p>";
+            echo "<pre style='background: #f8f9fa; padding: 8px; border-radius: 3px; overflow-x: auto;'>" . htmlspecialchars($match['content']) . "</pre>";
+        }
+
+        echo "<p style='color: #28a745;'><strong>Fix:</strong> Replace '$searchTerm' with '$correctTerm' in this file.</p>";
+        echo "</div>";
+    }
+    echo "</div>";
+}
+
+echo "<h2>File Structure Check</h2>";
+
+$requiredFiles = [
     'src/Database.php',
     'src/Company.php',
     'src/JobScraper.php',
     'src/Emailer.php',
     'src/JobMonitor.php',
     'config/config.php'
-);
+];
+
+echo "<table style='border-collapse: collapse; width: 100%; margin: 10px 0;'>";
+echo "<tr style='background: #f8f9fa;'>";
+echo "<th style='border: 1px solid #ddd; padding: 8px; text-align: left;'>File</th>";
+echo "<th style='border: 1px solid #ddd; padding: 8px; text-align: left;'>Status</th>";
+echo "</tr>";
 
 foreach ($requiredFiles as $file) {
-    if (!file_exists(__DIR__ . '/' . $file)) {
-        die("Missing required file: $file");
-    }
+    $exists = file_exists($rootDir . '/' . $file);
+    $status = $exists ? "✅ Exists" : "❌ Missing";
+    $color = $exists ? "#d4edda" : "#f8d7da";
+
+    echo "<tr style='background: $color;'>";
+    echo "<td style='border: 1px solid #ddd; padding: 8px;'>" . htmlspecialchars($file) . "</td>";
+    echo "<td style='border: 1px solid #ddd; padding: 8px;'>$status</td>";
+    echo "</tr>";
 }
+
+echo "</table>";
+
+// Check if config file exists
+if (!file_exists($rootDir . '/config/config.php')) {
+    echo "<div style='background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 10px 0;'>";
+    echo "<h3 style='color: #856404;'>⚠️ Config File Missing</h3>";
+    echo "<p>Create <code>config/config.php</code> from <code>config/config.example.php</code></p>";
+    echo "</div>";
+}
+
+echo "<h2>Quick Class Test</h2>";
 
 try {
-    require_once __DIR__ . '/src/Database.php';
-    require_once __DIR__ . '/src/Company.php';
-    require_once __DIR__ . '/src/JobScraper.php';
-    require_once __DIR__ . '/src/Emailer.php';
-    require_once __DIR__ . '/src/JobMonitor.php';
+    // Test if we can load the JobMonitor class
+    if (file_exists($rootDir . '/src/JobMonitor.php')) {
+        require_once $rootDir . '/src/JobMonitor.php';
+        echo "<p style='color: green;'>✅ JobMonitor class file found and loadable</p>";
 
-    // Initialize database and create tables
-    $db = new Database();
-    $db->createTables();
-
-    $company = new Company($db);
-    $monitor = new JobMonitor();
-
-} catch (Exception $e) {
-    die("Initialization error: " . $e->getMessage());
-}
-
-// Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        if (isset($_POST['action'])) {
-            switch ($_POST['action']) {
-                case 'add_company':
-                    if (!empty($_POST['company_name']) && !empty($_POST['careers_url'])) {
-                        $name = trim($_POST['company_name']);
-                        $url = trim($_POST['careers_url']);
-                        $selector = !empty($_POST['selector']) ? trim($_POST['selector']) : null;
-
-                        if ($company->add($name, $url, $selector)) {
-                            $message = "Company '$name' added successfully!";
-                            $messageType = 'success';
-                        } else {
-                            $message = "Failed to add company. Please try again.";
-                            $messageType = 'danger';
-                        }
-                    } else {
-                        $message = "Please fill in all required fields.";
-                        $messageType = 'warning';
-                    }
-                    break;
-
-                case 'delete_company':
-                    if (!empty($_POST['company_id'])) {
-                        if ($company->delete($_POST['company_id'])) {
-                            $message = "Company deleted successfully!";
-                            $messageType = 'success';
-                        } else {
-                            $message = "Failed to delete company.";
-                            $messageType = 'danger';
-                        }
-                    }
-                    break;
-            }
-        }
-    } catch (Exception $e) {
-        $message = "Error: " . $e->getMessage();
-        $messageType = 'danger';
+        // Try to create an instance (this might fail due to dependencies)
+        echo "<p><em>Note: Creating an instance might fail due to missing config or database, but the class file itself is OK.</em></p>";
+    } else {
+        echo "<p style='color: red;'>❌ JobMonitor.php file is missing</p>";
     }
-}
-
-// Get data for display
-try {
-    $companies = $company->getAll();
-    $stats = $monitor->getStats();
-    $recentJobs = $monitor->getRecentJobs(5);
 } catch (Exception $e) {
-    $companies = array();
-    $stats = array();
-    $recentJobs = array();
-    if (empty($message)) {
-        $message = "Warning: " . $e->getMessage();
-        $messageType = 'warning';
-    }
+    echo "<p style='color: orange;'>⚠️ JobMonitor class has issues: " . htmlspecialchars($e->getMessage()) . "</p>";
 }
 
-// Safely get values with fallbacks for older PHP
-function getValue($array, $key, $default = 0) {
-    return isset($array[$key]) ? $array[$key] : $default;
-}
+echo "<h2>Next Steps</h2>";
+echo "<ol>";
+echo "<li>If files with '$searchTerm' were found above, edit those files and replace with '$correctTerm'</li>";
+echo "<li>Make sure you have the correct <code>index.php</code> file (not the debug version)</li>";
+echo "<li>Ensure <code>config/config.php</code> exists with your database settings</li>";
+echo "<li>Clear your browser cache and try again</li>";
+echo "</ol>";
 
-// Check if API file exists
-$apiFileExists = file_exists(__DIR__ . '/api-monitor-robust.php');
+echo "<hr>";
+echo "<p><small>Diagnostic completed at " . date('Y-m-d H:i:s') . "</small></p>";
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Monitor Dashboard</title>
-
-    <!-- Google Fonts - Libre Franklin -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
-
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-
-    <style>
-        body {
-            font-family: 'Libre Franklin', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-        .hero-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .stat-card {
-            transition: transform 0.2s;
-        }
-        .stat-card:hover {
-            transform: translateY(-2px);
-        }
-        .job-item {
-            border-left: 4px solid #007bff;
-        }
-        .navbar-brand, .card-title, .display-5 {
-            font-weight: 600;
-        }
-        .h1, .h2, .h3, .h4, .h5, .h6, h1, h2, h3, h4, h5, h6 {
-            font-family: 'Libre Franklin', sans-serif;
-            font-weight: 600;
-        }
-    </style>
-</head>
-<body class="bg-light">
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand" href="index.php">
-                <i class="bi bi-search me-2"></i>
-                Job Monitor
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="test.php">
-                    <i class="bi bi-tools me-1"></i>
-                    Test Tool
-                </a>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <div class="hero-section py-5">
-        <div class="container text-center">
-            <h1 class="display-5 fw-bold mb-3">
-                <i class="bi bi-briefcase me-3"></i>
-                Job Monitor Dashboard
-            </h1>
-            <p class="lead mb-4">Automatically track job postings from your favorite companies</p>
-
-            <!-- Quick Stats -->
-            <div class="row justify-content-center">
-                <div class="col-md-3 col-6 mb-3">
-                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
-                        <div class="h3 mb-1 text-primary fw-bold"><?php echo getValue($stats, 'active_companies'); ?></div>
-                        <small class="text-light">Active Companies</small>
-                    </div>
-                </div>
-                <div class="col-md-3 col-6 mb-3">
-                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
-                        <div class="h3 mb-1 text-success fw-bold"><?php echo getValue($stats, 'total_jobs'); ?></div>
-                        <small class="text-light">Total Jobs Tracked</small>
-                    </div>
-                </div>
-                <div class="col-md-3 col-6 mb-3">
-                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
-                        <div class="h3 mb-1 text-warning fw-bold"><?php echo getValue($stats, 'new_jobs_today'); ?></div>
-                        <small class="text-light">New Today</small>
-                    </div>
-                </div>
-                <div class="col-md-3 col-6 mb-3">
-                    <div class="stat-card bg-dark bg-opacity-75 rounded p-3 text-center border border-light border-opacity-25">
-                        <div class="h3 mb-1 text-info fw-bold">
-                            <?php
-                            $lastRun = getValue($stats, 'last_run', null);
-                            echo $lastRun ? date('H:i', strtotime($lastRun)) : 'Never';
-                            ?>
-                        </div>
-                        <small class="text-light">Last Check</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="container py-4">
-        <!-- Messages -->
-        <?php if ($message): ?>
-            <div class="alert alert-<?php echo $messageType; ?> alert-dismissible fade show" role="alert">
-                <i class="bi bi-<?php echo $messageType === 'success' ? 'check-circle' : ($messageType === 'danger' ? 'exclamation-triangle' : 'info-circle'); ?> me-2"></i>
-                <?php echo htmlspecialchars($message); ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        <?php endif; ?>
-
-        <!-- API File Missing Warning -->
-        <?php if (!$apiFileExists): ?>
-            <div class="alert alert-warning alert-dismissible fade show" role="alert">
-                <i class="bi bi-exclamation-triangle me-2"></i>
-                <strong>API File Missing:</strong> Advanced monitoring features require <code>api-monitor-robust.php</code>.
-                Quick Test and Run All buttons will show basic functionality until this file is created.
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        <?php endif; ?>
-
-        <div class="row">
-            <!-- Add Company Form -->
-            <div class="col-lg-4 mb-4">
-                <div class="card h-100">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-plus-circle me-2"></i>
-                            Add Company
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <form method="post" id="addCompanyForm">
-                            <input type="hidden" name="action" value="add_company">
-
-                            <div class="mb-3">
-                                <label for="companyName" class="form-label">Company Name</label>
-                                <input type="text" class="form-control" id="companyName" name="company_name" required
-                                       placeholder="e.g., Netflix, Google, etc.">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="careersUrl" class="form-label">Careers Page URL</label>
-                                <input type="url" class="form-control" id="careersUrl" name="careers_url" required
-                                       placeholder="https://company.com/careers">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="selector" class="form-label">CSS Selector (Optional)</label>
-                                <input type="text" class="form-control" id="selector" name="selector"
-                                       placeholder="a[href*='job'], .job-listing, etc.">
-                                <div class="form-text">Leave empty for auto-detection</div>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary w-100">
-                                <i class="bi bi-plus me-1"></i>
-                                Add Company
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Manual Run & Recent Jobs -->
-            <div class="col-lg-8 mb-4">
-                <!-- Manual Run Section -->
-                <div class="card mb-4">
-                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-play-circle me-2"></i>
-                            Manual Run
-                        </h5>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-light btn-sm" id="quickTestBtn" onclick="runQuickTest()">
-                                <i class="bi bi-lightning me-1"></i>
-                                Quick Test
-                            </button>
-                            <button type="button" class="btn btn-light btn-sm" id="runBtn" onclick="startManualRun()">
-                                <i class="bi bi-play me-1"></i>
-                                Run All
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <!-- Progress Section -->
-                        <div id="progressSection" style="display: none;">
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span id="progressStatus">Starting...</span>
-                                    <span id="progressTime">0s</span>
-                                </div>
-                                <div class="progress" style="height: 8px;">
-                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                         id="progressBar" role="progressbar" style="width: 0%"></div>
-                                </div>
-                                <small class="text-muted" id="progressDetails">Initializing...</small>
-                            </div>
-
-                            <!-- Live Results -->
-                            <div id="liveResults" class="mt-3" style="display: none;">
-                                <h6>Live Results:</h6>
-                                <div id="companyResults"></div>
-                            </div>
-                        </div>
-
-                        <!-- Default Message -->
-                        <div id="defaultMessage">
-                            <p class="text-muted mb-3">Monitor your companies for new job postings:</p>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <i class="bi bi-lightning text-warning me-2"></i>
-                                        <strong>Quick Test:</strong> Tests first company only (10 seconds)
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <i class="bi bi-play text-primary me-2"></i>
-                                        <strong>Run All:</strong> Checks all companies (1-3 minutes)
-                                    </div>
-                                </div>
-                            </div>
-
-                            <?php if (!$apiFileExists): ?>
-                                <div class="alert alert-info alert-sm mt-3">
-                                    <i class="bi bi-info-circle me-2"></i>
-                                    <strong>Note:</strong> Create <code>api-monitor-robust.php</code> for enhanced monitoring features with real-time progress.
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recent Jobs -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-clock-history me-2"></i>
-                            Recent Job Discoveries
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <?php if (!empty($recentJobs)): ?>
-                            <?php foreach ($recentJobs as $job): ?>
-                                <div class="job-item bg-light p-3 mb-2 rounded">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div>
-                                            <h6 class="mb-1"><?php echo htmlspecialchars($job['title']); ?></h6>
-                                            <small class="text-muted">
-                                                <i class="bi bi-building me-1"></i>
-                                                <?php echo htmlspecialchars($job['company_name']); ?>
-                                                <i class="bi bi-calendar ms-3 me-1"></i>
-                                                <?php echo date('M j, Y', strtotime($job['first_seen'])); ?>
-                                            </small>
-                                        </div>
-                                        <?php if (!empty($job['url'])): ?>
-                                            <a href="<?php echo htmlspecialchars($job['url']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                <i class="bi bi-arrow-up-right-square"></i>
-                                            </a>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <div class="text-center py-3">
-                                <i class="bi bi-inbox display-6 text-muted mb-3"></i>
-                                <p class="text-muted">No jobs discovered yet</p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Companies List -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-buildings me-2"></i>
-                            Monitored Companies (<?php echo count($companies); ?>)
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <?php if (!empty($companies)): ?>
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th>Company</th>
-                                            <th>URL</th>
-                                            <th>Status</th>
-                                            <th>Last Checked</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($companies as $comp): ?>
-                                            <tr>
-                                                <td>
-                                                    <strong><?php echo htmlspecialchars($comp['name']); ?></strong>
-                                                    <?php if (!empty($comp['selector'])): ?>
-                                                        <br><small class="text-muted">Selector: <?php echo htmlspecialchars($comp['selector']); ?></small>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td>
-                                                    <a href="<?php echo htmlspecialchars($comp['careers_url']); ?>" target="_blank" class="text-decoration-none">
-                                                        <?php echo parse_url($comp['careers_url'], PHP_URL_HOST); ?>
-                                                        <i class="bi bi-arrow-up-right-square ms-1"></i>
-                                                    </a>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-<?php echo $comp['status'] === 'active' ? 'success' : 'secondary'; ?>">
-                                                        <?php echo ucfirst($comp['status']); ?>
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <?php echo $comp['last_checked'] ? date('M j, H:i', strtotime($comp['last_checked'])) : 'Never'; ?>
-                                                </td>
-                                                <td>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <a href="test.php?company_id=<?php echo $comp['id']; ?>" class="btn btn-outline-primary">
-                                                            <i class="bi bi-play"></i>
-                                                        </a>
-                                                        <button type="button" class="btn btn-outline-danger" onclick="deleteCompany(<?php echo $comp['id']; ?>, '<?php echo htmlspecialchars($comp['name']); ?>')">
-                                                            <i class="bi bi-trash"></i>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php else: ?>
-                            <div class="text-center py-5">
-                                <i class="bi bi-inbox display-1 text-muted mb-3"></i>
-                                <h5>No companies added yet</h5>
-                                <p class="text-muted">Add your first company using the form above to get started!</p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete confirmation modal -->
-    <div class="modal fade" id="deleteModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Confirm Delete</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to delete <strong id="deleteCompanyName"></strong>?</p>
-                    <p class="text-muted small">This will also delete all associated job records.</p>
-                </div>
-                <div class="modal-footer">
-                    <form method="post" id="deleteForm">
-                        <input type="hidden" name="action" value="delete_company">
-                        <input type="hidden" name="company_id" id="deleteCompanyId">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-    <script>
-        let startTime;
-        let progressTimer;
-        const API_FILE_EXISTS = <?php echo $apiFileExists ? 'true' : 'false'; ?>;
-
-        function deleteCompany(id, name) {
-            document.getElementById('deleteCompanyId').value = id;
-            document.getElementById('deleteCompanyName').textContent = name;
-            new bootstrap.Modal(document.getElementById('deleteModal')).show();
-        }
-
-        function runQuickTest() {
-            if (!API_FILE_EXISTS) {
-                showApiMissingMessage('Quick Test');
-                return;
-            }
-
-            const quickTestBtn = document.getElementById('quickTestBtn');
-            const progressSection = document.getElementById('progressSection');
-            const defaultMessage = document.getElementById('defaultMessage');
-
-            quickTestBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Testing...';
-            quickTestBtn.disabled = true;
-
-            defaultMessage.style.display = 'none';
-            progressSection.style.display = 'block';
-
-            updateProgress('Testing first company...', 'Quick test in progress...', 50);
-
-            startTime = Date.now();
-            startProgressTimer();
-
-            fetch('api-monitor-robust.php?action=test')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    return response.text();
-                })
-                .then(text => {
-                    console.log('API response:', text);
-                    const data = JSON.parse(text);
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-                    return fetch('api-monitor-robust.php?action=quick_test');
-                })
-                .then(response => response.text())
-                .then(text => {
-                    console.log('Quick test response:', text);
-                    const data = JSON.parse(text);
-                    clearInterval(progressTimer);
-
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    const result = data.test_result;
-                    updateProgress('Test completed!', `${result.company}: ${result.success ? 'Success' : 'Failed'}`, 100);
-                    showQuickTestResult(result);
-
-                    setTimeout(() => {
-                        resetButtons();
-                        hideProgress();
-                    }, 5000);
-                })
-                .catch(error => {
-                    clearInterval(progressTimer);
-                    console.error('Quick test failed:', error);
-                    updateProgress('Test failed', error.message, 0);
-                    document.getElementById('progressBar').classList.add('bg-danger');
-
-                    setTimeout(() => {
-                        resetButtons();
-                        hideProgress();
-                    }, 5000);
-                });
-        }
-
-        function startManualRun() {
-            if (!API_FILE_EXISTS) {
-                showApiMissingMessage('Run All');
-                return;
-            }
-
-            const runBtn = document.getElementById('runBtn');
-            const progressSection = document.getElementById('progressSection');
-            const defaultMessage = document.getElementById('defaultMessage');
-
-            runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
-            runBtn.disabled = true;
-
-            defaultMessage.style.display = 'none';
-            progressSection.style.display = 'block';
-            document.getElementById('liveResults').style.display = 'block';
-
-            updateProgress('Starting monitoring...', 'Connecting to companies...', 10);
-
-            startTime = Date.now();
-            startProgressTimer();
-
-            fetch('api-monitor-robust.php?action=test')
-                .then(response => response.text())
-                .then(text => {
-                    console.log('API test response:', text);
-                    const data = JSON.parse(text);
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-                    updateProgress('Running full monitoring...', 'Checking all companies...', 20);
-
-                    return fetch('api-monitor-robust.php?action=run');
-                })
-                .then(response => response.text())
-                .then(text => {
-                    console.log('Monitor response:', text);
-                    const data = JSON.parse(text);
-                    clearInterval(progressTimer);
-
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    const results = data.results;
-                    updateProgress('Monitoring completed!', data.message, 100);
-                    showFullResults(results);
-
-                    setTimeout(() => {
-                        resetButtons();
-                        if (results.total_new_jobs > 0) {
-                            setTimeout(() => location.reload(), 2000);
-                        }
-                    }, 5000);
-                })
-                .catch(error => {
-                    clearInterval(progressTimer);
-                    console.error('Monitoring failed:', error);
-                    updateProgress('Monitoring failed', error.message, 0);
-                    document.getElementById('progressBar').classList.add('bg-danger');
-
-                    setTimeout(() => {
-                        resetButtons();
-                        hideProgress();
-                    }, 5000);
-                });
-        }
-
-        function showApiMissingMessage(action) {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-warning alert-dismissible fade show';
-            alertDiv.innerHTML = `
-                <i class="bi bi-exclamation-triangle me-2"></i>
-                <strong>${action} requires API file:</strong> Please create <code>api-monitor-robust.php</code> for advanced monitoring features.
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.container.py-4').insertBefore(alertDiv, document.querySelector('.row'));
-        }
-
-        function updateProgress(status, details, percent) {
-            document.getElementById('progressStatus').textContent = status;
-            document.getElementById('progressDetails').textContent = details;
-            document.getElementById('progressBar').style.width = percent + '%';
-        }
-
-        function startProgressTimer() {
-            progressTimer = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                document.getElementById('progressTime').textContent = elapsed + 's';
-            }, 1000);
-        }
-
-        function showQuickTestResult(result) {
-            const resultsDiv = document.getElementById('companyResults');
-            resultsDiv.innerHTML = `
-                <div class="alert alert-${result.success ? 'success' : 'warning'} alert-sm">
-                    <strong>${result.company}:</strong>
-                    ${result.success ? `✅ Found ${result.job_count} jobs` : `❌ ${result.error || 'Failed to scrape'}`}
-                    <small class="d-block">Duration: ${result.duration}s</small>
-                </div>
-            `;
-        }
-
-        function showFullResults(results) {
-            const resultsDiv = document.getElementById('companyResults');
-            let html = `
-                <div class="alert alert-info alert-sm mb-2">
-                    <strong>Summary:</strong> ${results.companies_checked} companies checked,
-                    ${results.total_new_jobs} new jobs found, ${results.errors} errors
-                </div>
-            `;
-
-            if (results.details) {
-                Object.keys(results.details).forEach(company => {
-                    const detail = results.details[company];
-                    html += `
-                        <div class="alert alert-${detail.success ? 'success' : 'warning'} alert-sm">
-                            <strong>${company}:</strong>
-                            ${detail.success ? `✅ ${detail.new_jobs} new jobs` : `❌ ${detail.error}`}
-                            <small class="d-block">Duration: ${detail.duration}s</small>
-                        </div>
-                    `;
-                });
-            }
-
-            resultsDiv.innerHTML = html;
-        }
-
-        function resetButtons() {
-            const runBtn = document.getElementById('runBtn');
-            const quickTestBtn = document.getElementById('quickTestBtn');
-
-            runBtn.innerHTML = '<i class="bi bi-play me-1"></i>Run All';
-            runBtn.disabled = false;
-
-            quickTestBtn.innerHTML = '<i class="bi bi-lightning me-1"></i>Quick Test';
-            quickTestBtn.disabled = false;
-        }
-
-        function hideProgress() {
-            setTimeout(() => {
-                document.getElementById('progressSection').style.display = 'none';
-                document.getElementById('defaultMessage').style.display = 'block';
-                document.getElementById('progressBar').classList.remove('bg-danger');
-            }, 3000);
-        }
-
-        // Add loading states for forms
-        document.getElementById('addCompanyForm').addEventListener('submit', function() {
-            const btn = this.querySelector('button[type="submit"]');
-            btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
-            btn.disabled = true;
-        });
-
-        // Test API on page load (only if file exists)
-        if (API_FILE_EXISTS) {
-            fetch('api-monitor-robust.php?action=test')
-                .then(response => response.json())
-                .then(data => console.log('API test successful:', data))
-                .catch(error => console.log('API test failed:', error));
-        }
-    </script>
-</body>
-</html>
