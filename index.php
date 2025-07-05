@@ -1,5 +1,5 @@
 <?php
-// index.php - Main Application Interface (PHP 5.6+ Compatible)
+// index.php - Main Application Interface with Timeout Protection
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -166,7 +166,7 @@ function getValue($array, $key, $default = 0) {
                     <i class="bi bi-tools me-1"></i>
                     Test Tool
                 </a>
-                <a class="nav-link" href="debug.php">
+                <a class="nav-link" href="scrape-debug.php">
                     <i class="bi bi-bug me-1"></i>
                     Debug
                 </a>
@@ -279,50 +279,56 @@ function getValue($array, $key, $default = 0) {
                             <i class="bi bi-play-circle me-2"></i>
                             Manual Run
                         </h5>
-                        <button type="button" class="btn btn-light btn-sm" id="runBtn" onclick="startManualRun()">
-                            <i class="bi bi-play me-1"></i>
-                            Run Now
-                        </button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-light btn-sm" id="quickTestBtn" onclick="runQuickTest()">
+                                <i class="bi bi-lightning me-1"></i>
+                                Quick Test
+                            </button>
+                            <button type="button" class="btn btn-light btn-sm" id="runBtn" onclick="startManualRun()">
+                                <i class="bi bi-play me-1"></i>
+                                Run All
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <!-- Progress Section -->
                         <div id="progressSection" style="display: none;">
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span id="progressStatus">Initializing...</span>
-                                    <span id="progressPercent">0%</span>
+                                    <span id="progressStatus">Starting...</span>
+                                    <span id="progressTime">0s</span>
                                 </div>
                                 <div class="progress" style="height: 8px;">
                                     <div class="progress-bar progress-bar-striped progress-bar-animated"
                                          id="progressBar" role="progressbar" style="width: 0%"></div>
                                 </div>
-                                <small class="text-muted" id="progressDetails">Preparing to check companies...</small>
+                                <small class="text-muted" id="progressDetails">Initializing...</small>
                             </div>
 
-                            <!-- Live Stats -->
-                            <div class="row text-center" id="liveStats">
-                                <div class="col-3">
-                                    <div class="h6 text-primary" id="companiesChecked">0</div>
-                                    <small class="text-muted">Checked</small>
-                                </div>
-                                <div class="col-3">
-                                    <div class="h6 text-success" id="newJobsFound">0</div>
-                                    <small class="text-muted">New Jobs</small>
-                                </div>
-                                <div class="col-3">
-                                    <div class="h6 text-warning" id="errorsCount">0</div>
-                                    <small class="text-muted">Errors</small>
-                                </div>
-                                <div class="col-3">
-                                    <div class="h6 text-info" id="timeElapsed">0s</div>
-                                    <small class="text-muted">Time</small>
-                                </div>
+                            <!-- Live Results -->
+                            <div id="liveResults" class="mt-3" style="display: none;">
+                                <h6>Live Results:</h6>
+                                <div id="companyResults"></div>
                             </div>
                         </div>
 
-                        <!-- Results will be shown here after completion -->
+                        <!-- Default Message -->
                         <div id="defaultMessage">
-                            <p class="text-muted mb-0">Click "Run Now" to check all companies for new job postings immediately.</p>
+                            <p class="text-muted mb-3">Monitor your companies for new job postings:</p>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-lightning text-warning me-2"></i>
+                                        <strong>Quick Test:</strong> Tests first company only (10 seconds)
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-play text-primary me-2"></i>
+                                        <strong>Run All:</strong> Checks all companies (1-3 minutes)
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -470,8 +476,8 @@ function getValue($array, $key, $default = 0) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        let progressInterval;
         let startTime;
+        let progressTimer;
 
         function deleteCompany(id, name) {
             document.getElementById('deleteCompanyId').value = id;
@@ -479,194 +485,192 @@ function getValue($array, $key, $default = 0) {
             new bootstrap.Modal(document.getElementById('deleteModal')).show();
         }
 
+        function runQuickTest() {
+            const quickTestBtn = document.getElementById('quickTestBtn');
+            const progressSection = document.getElementById('progressSection');
+            const defaultMessage = document.getElementById('defaultMessage');
+
+            // Update UI
+            quickTestBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Testing...';
+            quickTestBtn.disabled = true;
+
+            defaultMessage.style.display = 'none';
+            progressSection.style.display = 'block';
+
+            updateProgress('Testing first company...', 'Quick test in progress...', 50);
+
+            startTime = Date.now();
+            startProgressTimer();
+
+            // Test API first
+            fetch('api-monitor-robust.php?action=test')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    // API works, run quick test
+                    return fetch('api-monitor-robust.php?action=quick_test');
+                })
+                .then(response => response.json())
+                .then(data => {
+                    clearInterval(progressTimer);
+
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    const result = data.test_result;
+                    updateProgress('Test completed!', `${result.company}: ${result.success ? 'Success' : 'Failed'}`, 100);
+
+                    showQuickTestResult(result);
+
+                    setTimeout(() => {
+                        resetButtons();
+                        hideProgress();
+                    }, 5000);
+                })
+                .catch(error => {
+                    clearInterval(progressTimer);
+                    console.error('Quick test failed:', error);
+                    updateProgress('Test failed', error.message, 0);
+                    document.getElementById('progressBar').classList.add('bg-danger');
+
+                    setTimeout(() => {
+                        resetButtons();
+                        hideProgress();
+                    }, 5000);
+                });
+        }
+
         function startManualRun() {
             const runBtn = document.getElementById('runBtn');
             const progressSection = document.getElementById('progressSection');
             const defaultMessage = document.getElementById('defaultMessage');
 
-            // Update button state
+            // Update UI
             runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
             runBtn.disabled = true;
 
-            // Show progress section, hide default message
-            if (defaultMessage) defaultMessage.style.display = 'none';
+            defaultMessage.style.display = 'none';
             progressSection.style.display = 'block';
+            document.getElementById('liveResults').style.display = 'block';
 
-            // Reset progress
-            updateProgress(0, 'Starting monitoring...', 'Initializing job monitoring system...');
-            updateStats(0, 0, 0, 0);
+            updateProgress('Starting monitoring...', 'Connecting to companies...', 10);
 
             startTime = Date.now();
+            startProgressTimer();
 
-            // First test if API is working
-            fetch('api-monitor.php?action=test')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            // Test API first
+            fetch('api-monitor-robust.php?action=test')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
                     }
-                    return response.text(); // Get as text first to debug
+                    updateProgress('Running full monitoring...', 'Checking all companies...', 20);
+
+                    // Run full monitoring
+                    return fetch('api-monitor-robust.php?action=run');
                 })
-                .then(text => {
-                    console.log('API test response:', text);
-                    try {
-                        const data = JSON.parse(text);
-                        if (data.error) {
-                            throw new Error(data.error);
-                        }
-                        // API is working, start the actual run
-                        startActualRun();
-                    } catch (e) {
-                        throw new Error('Invalid JSON response: ' + text.substring(0, 100));
-                    }
-                })
-                .catch(error => {
-                    console.error('API test failed:', error);
-                    showError('API Error: ' + error.message);
-                    resetButton();
-                });
-        }
-
-        function startActualRun() {
-            updateProgress(10, 'Starting job monitoring...', 'Connecting to companies...');
-
-            fetch('api-monitor.php?action=run')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    return response.text(); // Get as text first for debugging
-                })
-                .then(text => {
-                    console.log('Monitor response:', text);
-                    try {
-                        const data = JSON.parse(text);
-                        if (data.error) {
-                            throw new Error(data.error);
-                        }
-
-                        // Simulate progress updates for better UX
-                        simulateProgress(data.results);
-
-                    } catch (e) {
-                        throw new Error('Invalid JSON response: ' + text.substring(0, 200));
-                    }
-                })
-                .catch(error => {
-                    console.error('Monitor run failed:', error);
-                    showError('Monitoring Error: ' + error.message);
-                    resetButton();
-                });
-        }
-
-        function simulateProgress(results) {
-            const totalCompanies = results.companies_checked || 1;
-            let currentProgress = 10;
-
-            const progressStep = 80 / totalCompanies; // 80% for processing, 10% start, 10% finish
-
-            updateProgress(currentProgress, 'Processing companies...', `Checking ${totalCompanies} companies...`);
-
-            const progressTimer = setInterval(() => {
-                currentProgress += progressStep;
-                updateProgress(
-                    Math.min(currentProgress, 90),
-                    'Checking companies...',
-                    `Processing job listings...`
-                );
-
-                // Update live stats gradually
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                updateStats(
-                    Math.floor(currentProgress / progressStep),
-                    Math.floor((results.total_new_jobs || 0) * (currentProgress / 90)),
-                    results.errors || 0,
-                    elapsed
-                );
-
-                if (currentProgress >= 90) {
+                .then(response => response.json())
+                .then(data => {
                     clearInterval(progressTimer);
-                    completeRun(results);
-                }
+
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    const results = data.results;
+                    updateProgress('Monitoring completed!', data.message, 100);
+
+                    showFullResults(results);
+
+                    setTimeout(() => {
+                        resetButtons();
+                        if (results.total_new_jobs > 0) {
+                            setTimeout(() => location.reload(), 2000);
+                        }
+                    }, 5000);
+                })
+                .catch(error => {
+                    clearInterval(progressTimer);
+                    console.error('Monitoring failed:', error);
+                    updateProgress('Monitoring failed', error.message, 0);
+                    document.getElementById('progressBar').classList.add('bg-danger');
+
+                    setTimeout(() => {
+                        resetButtons();
+                        hideProgress();
+                    }, 5000);
+                });
+        }
+
+        function updateProgress(status, details, percent) {
+            document.getElementById('progressStatus').textContent = status;
+            document.getElementById('progressDetails').textContent = details;
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+
+        function startProgressTimer() {
+            progressTimer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                document.getElementById('progressTime').textContent = elapsed + 's';
             }, 1000);
         }
 
-        function updateProgress(percent, status, details) {
-            document.getElementById('progressBar').style.width = percent + '%';
-            document.getElementById('progressPercent').textContent = Math.round(percent) + '%';
-            document.getElementById('progressStatus').textContent = status;
-            document.getElementById('progressDetails').textContent = details;
+        function showQuickTestResult(result) {
+            const resultsDiv = document.getElementById('companyResults');
+            resultsDiv.innerHTML = `
+                <div class="alert alert-${result.success ? 'success' : 'warning'} alert-sm">
+                    <strong>${result.company}:</strong>
+                    ${result.success ? `✅ Found ${result.job_count} jobs` : `❌ ${result.error || 'Failed to scrape'}`}
+                    <small class="d-block">Duration: ${result.duration}s</small>
+                </div>
+            `;
         }
 
-        function updateStats(checked, jobs, errors, elapsed) {
-            document.getElementById('companiesChecked').textContent = checked;
-            document.getElementById('newJobsFound').textContent = jobs;
-            document.getElementById('errorsCount').textContent = errors;
-            document.getElementById('timeElapsed').textContent = elapsed + 's';
-        }
+        function showFullResults(results) {
+            const resultsDiv = document.getElementById('companyResults');
+            let html = `
+                <div class="alert alert-info alert-sm mb-2">
+                    <strong>Summary:</strong> ${results.companies_checked} companies checked,
+                    ${results.total_new_jobs} new jobs found, ${results.errors} errors
+                </div>
+            `;
 
-        function completeRun(results) {
-            updateProgress(100, 'Completed!', results.message || 'Job monitoring completed successfully');
-            updateStats(
-                results.companies_checked || 0,
-                results.total_new_jobs || 0,
-                results.errors || 0,
-                Math.floor((Date.now() - startTime) / 1000)
-            );
-
-            const runBtn = document.getElementById('runBtn');
-            runBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Completed';
-            runBtn.classList.remove('btn-light');
-            runBtn.classList.add('btn-success');
-
-            // Show completion message
-            if (results.total_new_jobs > 0) {
-                showCompletionMessage(`🎉 Found ${results.total_new_jobs} new jobs!`, 'success');
-            } else {
-                showCompletionMessage('✅ Monitoring completed - no new jobs found', 'info');
+            if (results.details) {
+                Object.keys(results.details).forEach(company => {
+                    const detail = results.details[company];
+                    html += `
+                        <div class="alert alert-${detail.success ? 'success' : 'warning'} alert-sm">
+                            <strong>${company}:</strong>
+                            ${detail.success ? `✅ ${detail.new_jobs} new jobs` : `❌ ${detail.error}`}
+                            <small class="d-block">Duration: ${detail.duration}s</small>
+                        </div>
+                    `;
+                });
             }
 
-            // Reset button after 5 seconds
-            setTimeout(() => {
-                resetButton();
-                // Reload page if new jobs were found
-                if (results.total_new_jobs > 0) {
-                    setTimeout(() => location.reload(), 2000);
-                }
-            }, 5000);
+            resultsDiv.innerHTML = html;
         }
 
-        function showError(message) {
-            updateProgress(0, 'Error', message);
-            document.getElementById('progressBar').classList.add('bg-danger');
-            showCompletionMessage('❌ ' + message, 'danger');
-        }
-
-        function showCompletionMessage(message, type) {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show mt-3`;
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.getElementById('progressSection').appendChild(alertDiv);
-        }
-
-        function resetButton() {
+        function resetButtons() {
             const runBtn = document.getElementById('runBtn');
-            runBtn.innerHTML = '<i class="bi bi-play me-1"></i>Run Now';
+            const quickTestBtn = document.getElementById('quickTestBtn');
+
+            runBtn.innerHTML = '<i class="bi bi-play me-1"></i>Run All';
             runBtn.disabled = false;
-            runBtn.classList.remove('btn-success');
-            runBtn.classList.add('btn-light');
 
-            // Reset progress bar color
-            document.getElementById('progressBar').classList.remove('bg-danger');
+            quickTestBtn.innerHTML = '<i class="bi bi-lightning me-1"></i>Quick Test';
+            quickTestBtn.disabled = false;
+        }
 
-            // Hide progress section after a delay
+        function hideProgress() {
             setTimeout(() => {
                 document.getElementById('progressSection').style.display = 'none';
-                if (document.getElementById('defaultMessage')) {
-                    document.getElementById('defaultMessage').style.display = 'block';
-                }
+                document.getElementById('defaultMessage').style.display = 'block';
+                document.getElementById('progressBar').classList.remove('bg-danger');
             }, 3000);
         }
 
@@ -677,9 +681,8 @@ function getValue($array, $key, $default = 0) {
             btn.disabled = true;
         });
 
-        // Debug: Test API when page loads
-        console.log('Testing API connection...');
-        fetch('api-monitor.php?action=test')
+        // Debug: Test API on page load
+        fetch('api-monitor-robust.php?action=test')
             .then(response => response.json())
             .then(data => console.log('API test successful:', data))
             .catch(error => console.log('API test failed:', error));
