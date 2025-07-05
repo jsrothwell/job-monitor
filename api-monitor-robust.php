@@ -1,9 +1,10 @@
 <?php
 // api-monitor-robust.php - Robust monitoring API with timeouts
-error_reporting(0);
+error_reporting(0); // Suppress all PHP errors to prevent HTML output
 ini_set('display_errors', 0);
 set_time_limit(120); // 2 minute maximum execution time
 
+// Ensure we always output JSON
 header('Content-Type: application/json');
 header('Cache-Control: no-cache');
 
@@ -16,7 +17,7 @@ function jsonError($message) {
     jsonResponse(array('error' => $message));
 }
 
-// Check required files
+// Basic file existence check
 $requiredFiles = array(
     'src/Database.php',
     'src/Company.php',
@@ -31,12 +32,14 @@ foreach ($requiredFiles as $file) {
     }
 }
 
+// Check for action parameter
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 if (empty($action)) {
     jsonError('No action specified');
 }
 
 try {
+    // Load required classes
     require_once __DIR__ . '/src/Database.php';
     require_once __DIR__ . '/src/Company.php';
     require_once __DIR__ . '/src/JobScraper.php';
@@ -44,7 +47,7 @@ try {
     require_once __DIR__ . '/src/JobMonitor.php';
 
     if ($action === 'run') {
-        // Create a robust monitor with better error handling
+        // Run monitoring in robust mode
         $monitor = new RobustJobMonitor();
         $results = $monitor->runWithTimeouts();
 
@@ -55,10 +58,12 @@ try {
         ));
 
     } elseif ($action === 'test') {
+        // Simple test endpoint
         jsonResponse(array(
             'success' => true,
             'message' => 'API is working',
-            'timestamp' => date('Y-m-d H:i:s')
+            'timestamp' => date('Y-m-d H:i:s'),
+            'php_version' => PHP_VERSION
         ));
 
     } elseif ($action === 'quick_test') {
@@ -77,6 +82,8 @@ try {
 
 } catch (Exception $e) {
     jsonError('Exception: ' . $e->getMessage());
+} catch (Error $e) {
+    jsonError('Fatal error: ' . $e->getMessage());
 }
 
 class RobustJobMonitor extends JobMonitor {
