@@ -11,7 +11,6 @@ if (version_compare(PHP_VERSION, '5.6.0', '<')) {
 // Initialize variables
 $message = '';
 $messageType = '';
-$runResults = null;
 
 // Check if required files exist
 $requiredFiles = array(
@@ -69,12 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $message = "Please fill in all required fields.";
                         $messageType = 'warning';
                     }
-                    break;
-
-                case 'run_monitor':
-                    $runResults = $monitor->runManual();
-                    $message = "Monitoring completed! Checked " . $runResults['companies_checked'] . " companies, found " . $runResults['total_new_jobs'] . " new jobs.";
-                    $messageType = $runResults['total_new_jobs'] > 0 ? 'success' : 'info';
                     break;
 
                 case 'delete_company':
@@ -286,64 +279,51 @@ function getValue($array, $key, $default = 0) {
                             <i class="bi bi-play-circle me-2"></i>
                             Manual Run
                         </h5>
-                        <form method="post" class="d-inline">
-                            <input type="hidden" name="action" value="run_monitor">
-                            <button type="submit" class="btn btn-light btn-sm" id="runBtn">
-                                <i class="bi bi-play me-1"></i>
-                                Run Now
-                            </button>
-                        </form>
+                        <button type="button" class="btn btn-light btn-sm" id="runBtn" onclick="startManualRun()">
+                            <i class="bi bi-play me-1"></i>
+                            Run Now
+                        </button>
                     </div>
                     <div class="card-body">
-                        <?php if ($runResults): ?>
-                            <div class="row text-center mb-3">
+                        <!-- Progress Section -->
+                        <div id="progressSection" style="display: none;">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span id="progressStatus">Initializing...</span>
+                                    <span id="progressPercent">0%</span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                         id="progressBar" role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <small class="text-muted" id="progressDetails">Preparing to check companies...</small>
+                            </div>
+
+                            <!-- Live Stats -->
+                            <div class="row text-center" id="liveStats">
                                 <div class="col-3">
-                                    <div class="h5 text-primary"><?php echo $runResults['companies_checked']; ?></div>
-                                    <small class="text-muted">Companies</small>
+                                    <div class="h6 text-primary" id="companiesChecked">0</div>
+                                    <small class="text-muted">Checked</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h5 text-success"><?php echo $runResults['total_new_jobs']; ?></div>
+                                    <div class="h6 text-success" id="newJobsFound">0</div>
                                     <small class="text-muted">New Jobs</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h5 text-info"><?php echo $runResults['emails_sent']; ?></div>
-                                    <small class="text-muted">Emails Sent</small>
+                                    <div class="h6 text-warning" id="errorsCount">0</div>
+                                    <small class="text-muted">Errors</small>
                                 </div>
                                 <div class="col-3">
-                                    <div class="h5 text-warning"><?php echo $runResults['duration']; ?>s</div>
-                                    <small class="text-muted">Duration</small>
+                                    <div class="h6 text-info" id="timeElapsed">0s</div>
+                                    <small class="text-muted">Time</small>
                                 </div>
                             </div>
+                        </div>
 
-                            <?php if (!empty($runResults['details'])): ?>
-                                <div class="accordion" id="runResultsAccordion">
-                                    <div class="accordion-item">
-                                        <h2 class="accordion-header">
-                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#runDetails">
-                                                View Detailed Results
-                                            </button>
-                                        </h2>
-                                        <div id="runDetails" class="accordion-collapse collapse" data-bs-parent="#runResultsAccordion">
-                                            <div class="accordion-body">
-                                                <?php foreach ($runResults['details'] as $companyName => $result): ?>
-                                                    <div class="mb-2">
-                                                        <strong><?php echo htmlspecialchars($companyName); ?>:</strong>
-                                                        <span class="badge bg-<?php echo $result['success'] ? 'success' : 'danger'; ?>">
-                                                            <?php echo $result['success'] ? $result['new_jobs'] . ' new jobs' : 'Failed'; ?>
-                                                        </span>
-                                                        <?php if (!$result['success']): ?>
-                                                            <small class="text-muted d-block"><?php echo htmlspecialchars($result['error']); ?></small>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                <?php endforeach; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                        <?php else: ?>
+                        <!-- Results will be shown here after completion -->
+                        <div id="defaultMessage">
                             <p class="text-muted mb-0">Click "Run Now" to check all companies for new job postings immediately.</p>
-                        <?php endif; ?>
+                        </div>
                     </div>
                 </div>
 
@@ -490,22 +470,156 @@ function getValue($array, $key, $default = 0) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        let progressInterval;
+        let startTime;
+
         function deleteCompany(id, name) {
             document.getElementById('deleteCompanyId').value = id;
             document.getElementById('deleteCompanyName').textContent = name;
             new bootstrap.Modal(document.getElementById('deleteModal')).show();
         }
 
-        // Add loading states
+        function startManualRun() {
+            const runBtn = document.getElementById('runBtn');
+            const progressSection = document.getElementById('progressSection');
+            const defaultMessage = document.getElementById('defaultMessage');
+
+            // Update button state
+            runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Starting...';
+            runBtn.disabled = true;
+
+            // Show progress section, hide default message
+            if (defaultMessage) defaultMessage.style.display = 'none';
+            progressSection.style.display = 'block';
+
+            // Reset progress
+            updateProgress(0, 'Initializing...', 'Preparing to check companies...');
+            updateStats(0, 0, 0, 0);
+
+            startTime = Date.now();
+
+            // Start the monitoring run
+            fetch('api-monitor.php?action=run')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    // Start polling for progress
+                    progressInterval = setInterval(pollProgress, 1000);
+                })
+                .catch(error => {
+                    console.error('Error starting monitor:', error);
+                    showError('Failed to start monitoring: ' + error.message);
+                    resetButton();
+                });
+        }
+
+        function pollProgress() {
+            fetch('api-monitor.php?action=status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'idle') {
+                        return;
+                    }
+
+                    updateProgress(data.progress || 0, getStatusMessage(data), getDetailsMessage(data));
+                    updateStats(
+                        data.companies_checked || 0,
+                        data.new_jobs || 0,
+                        data.errors || 0,
+                        Math.floor((Date.now() - startTime) / 1000)
+                    );
+
+                    if (data.status === 'completed') {
+                        clearInterval(progressInterval);
+                        completeRun(data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error polling progress:', error);
+                    clearInterval(progressInterval);
+                    showError('Lost connection to monitoring process');
+                    resetButton();
+                });
+        }
+
+        function updateProgress(percent, status, details) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('progressPercent').textContent = Math.round(percent) + '%';
+            document.getElementById('progressStatus').textContent = status;
+            document.getElementById('progressDetails').textContent = details;
+        }
+
+        function updateStats(checked, jobs, errors, elapsed) {
+            document.getElementById('companiesChecked').textContent = checked;
+            document.getElementById('newJobsFound').textContent = jobs;
+            document.getElementById('errorsCount').textContent = errors;
+            document.getElementById('timeElapsed').textContent = elapsed + 's';
+        }
+
+        function getStatusMessage(data) {
+            if (data.status === 'starting') return 'Starting monitoring...';
+            if (data.status === 'running') return 'Checking: ' + data.current_company;
+            if (data.status === 'completed') return 'Completed!';
+            return 'Processing...';
+        }
+
+        function getDetailsMessage(data) {
+            if (data.status === 'running') {
+                return `Checking ${data.companies_checked + 1} of ${data.total_companies} companies...`;
+            }
+            if (data.status === 'completed') {
+                return data.message || 'Monitoring completed successfully';
+            }
+            return 'Preparing to check companies...';
+        }
+
+        function completeRun(data) {
+            updateProgress(100, 'Completed!', data.message || 'Monitoring completed');
+
+            const runBtn = document.getElementById('runBtn');
+            runBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Completed';
+            runBtn.classList.remove('btn-light');
+            runBtn.classList.add('btn-success');
+
+            // Reset button after 3 seconds
+            setTimeout(() => {
+                resetButton();
+                // Optionally reload the page to show new results
+                if (data.new_jobs > 0) {
+                    setTimeout(() => location.reload(), 2000);
+                }
+            }, 3000);
+        }
+
+        function showError(message) {
+            updateProgress(0, 'Error', message);
+            document.getElementById('progressBar').classList.add('bg-danger');
+        }
+
+        function resetButton() {
+            const runBtn = document.getElementById('runBtn');
+            runBtn.innerHTML = '<i class="bi bi-play me-1"></i>Run Now';
+            runBtn.disabled = false;
+            runBtn.classList.remove('btn-success');
+            runBtn.classList.add('btn-light');
+
+            // Hide progress section after a delay
+            setTimeout(() => {
+                document.getElementById('progressSection').style.display = 'none';
+                if (document.getElementById('defaultMessage')) {
+                    document.getElementById('defaultMessage').style.display = 'block';
+                }
+            }, 5000);
+        }
+
+        // Add loading states for forms
         document.getElementById('addCompanyForm').addEventListener('submit', function() {
-            var btn = this.querySelector('button[type="submit"]');
+            const btn = this.querySelector('button[type="submit"]');
             btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
             btn.disabled = true;
-        });
-
-        document.getElementById('runBtn').addEventListener('click', function() {
-            this.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
-            this.disabled = true;
         });
     </script>
 </body>
