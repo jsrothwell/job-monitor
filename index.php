@@ -485,7 +485,7 @@ function getValue($array, $key, $default = 0) {
             const defaultMessage = document.getElementById('defaultMessage');
 
             // Update button state
-            runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Starting...';
+            runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
             runBtn.disabled = true;
 
             // Show progress section, hide default message
@@ -493,56 +493,101 @@ function getValue($array, $key, $default = 0) {
             progressSection.style.display = 'block';
 
             // Reset progress
-            updateProgress(0, 'Initializing...', 'Preparing to check companies...');
+            updateProgress(0, 'Starting monitoring...', 'Initializing job monitoring system...');
             updateStats(0, 0, 0, 0);
 
             startTime = Date.now();
 
-            // Start the monitoring run
-            fetch('api-monitor.php?action=run')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
+            // First test if API is working
+            fetch('api-monitor.php?action=test')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
-
-                    // Start polling for progress
-                    progressInterval = setInterval(pollProgress, 1000);
+                    return response.text(); // Get as text first to debug
+                })
+                .then(text => {
+                    console.log('API test response:', text);
+                    try {
+                        const data = JSON.parse(text);
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        // API is working, start the actual run
+                        startActualRun();
+                    } catch (e) {
+                        throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+                    }
                 })
                 .catch(error => {
-                    console.error('Error starting monitor:', error);
-                    showError('Failed to start monitoring: ' + error.message);
+                    console.error('API test failed:', error);
+                    showError('API Error: ' + error.message);
                     resetButton();
                 });
         }
 
-        function pollProgress() {
-            fetch('api-monitor.php?action=status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'idle') {
-                        return;
+        function startActualRun() {
+            updateProgress(10, 'Starting job monitoring...', 'Connecting to companies...');
+
+            fetch('api-monitor.php?action=run')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
+                    return response.text(); // Get as text first for debugging
+                })
+                .then(text => {
+                    console.log('Monitor response:', text);
+                    try {
+                        const data = JSON.parse(text);
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
 
-                    updateProgress(data.progress || 0, getStatusMessage(data), getDetailsMessage(data));
-                    updateStats(
-                        data.companies_checked || 0,
-                        data.new_jobs || 0,
-                        data.errors || 0,
-                        Math.floor((Date.now() - startTime) / 1000)
-                    );
+                        // Simulate progress updates for better UX
+                        simulateProgress(data.results);
 
-                    if (data.status === 'completed') {
-                        clearInterval(progressInterval);
-                        completeRun(data);
+                    } catch (e) {
+                        throw new Error('Invalid JSON response: ' + text.substring(0, 200));
                     }
                 })
                 .catch(error => {
-                    console.error('Error polling progress:', error);
-                    clearInterval(progressInterval);
-                    showError('Lost connection to monitoring process');
+                    console.error('Monitor run failed:', error);
+                    showError('Monitoring Error: ' + error.message);
                     resetButton();
                 });
+        }
+
+        function simulateProgress(results) {
+            const totalCompanies = results.companies_checked || 1;
+            let currentProgress = 10;
+
+            const progressStep = 80 / totalCompanies; // 80% for processing, 10% start, 10% finish
+
+            updateProgress(currentProgress, 'Processing companies...', `Checking ${totalCompanies} companies...`);
+
+            const progressTimer = setInterval(() => {
+                currentProgress += progressStep;
+                updateProgress(
+                    Math.min(currentProgress, 90),
+                    'Checking companies...',
+                    `Processing job listings...`
+                );
+
+                // Update live stats gradually
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                updateStats(
+                    Math.floor(currentProgress / progressStep),
+                    Math.floor((results.total_new_jobs || 0) * (currentProgress / 90)),
+                    results.errors || 0,
+                    elapsed
+                );
+
+                if (currentProgress >= 90) {
+                    clearInterval(progressTimer);
+                    completeRun(results);
+                }
+            }, 1000);
         }
 
         function updateProgress(percent, status, details) {
@@ -559,44 +604,51 @@ function getValue($array, $key, $default = 0) {
             document.getElementById('timeElapsed').textContent = elapsed + 's';
         }
 
-        function getStatusMessage(data) {
-            if (data.status === 'starting') return 'Starting monitoring...';
-            if (data.status === 'running') return 'Checking: ' + data.current_company;
-            if (data.status === 'completed') return 'Completed!';
-            return 'Processing...';
-        }
-
-        function getDetailsMessage(data) {
-            if (data.status === 'running') {
-                return `Checking ${data.companies_checked + 1} of ${data.total_companies} companies...`;
-            }
-            if (data.status === 'completed') {
-                return data.message || 'Monitoring completed successfully';
-            }
-            return 'Preparing to check companies...';
-        }
-
-        function completeRun(data) {
-            updateProgress(100, 'Completed!', data.message || 'Monitoring completed');
+        function completeRun(results) {
+            updateProgress(100, 'Completed!', results.message || 'Job monitoring completed successfully');
+            updateStats(
+                results.companies_checked || 0,
+                results.total_new_jobs || 0,
+                results.errors || 0,
+                Math.floor((Date.now() - startTime) / 1000)
+            );
 
             const runBtn = document.getElementById('runBtn');
             runBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Completed';
             runBtn.classList.remove('btn-light');
             runBtn.classList.add('btn-success');
 
-            // Reset button after 3 seconds
+            // Show completion message
+            if (results.total_new_jobs > 0) {
+                showCompletionMessage(`🎉 Found ${results.total_new_jobs} new jobs!`, 'success');
+            } else {
+                showCompletionMessage('✅ Monitoring completed - no new jobs found', 'info');
+            }
+
+            // Reset button after 5 seconds
             setTimeout(() => {
                 resetButton();
-                // Optionally reload the page to show new results
-                if (data.new_jobs > 0) {
+                // Reload page if new jobs were found
+                if (results.total_new_jobs > 0) {
                     setTimeout(() => location.reload(), 2000);
                 }
-            }, 3000);
+            }, 5000);
         }
 
         function showError(message) {
             updateProgress(0, 'Error', message);
             document.getElementById('progressBar').classList.add('bg-danger');
+            showCompletionMessage('❌ ' + message, 'danger');
+        }
+
+        function showCompletionMessage(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show mt-3`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('progressSection').appendChild(alertDiv);
         }
 
         function resetButton() {
@@ -606,13 +658,16 @@ function getValue($array, $key, $default = 0) {
             runBtn.classList.remove('btn-success');
             runBtn.classList.add('btn-light');
 
+            // Reset progress bar color
+            document.getElementById('progressBar').classList.remove('bg-danger');
+
             // Hide progress section after a delay
             setTimeout(() => {
                 document.getElementById('progressSection').style.display = 'none';
                 if (document.getElementById('defaultMessage')) {
                     document.getElementById('defaultMessage').style.display = 'block';
                 }
-            }, 5000);
+            }, 3000);
         }
 
         // Add loading states for forms
@@ -621,6 +676,13 @@ function getValue($array, $key, $default = 0) {
             btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
             btn.disabled = true;
         });
+
+        // Debug: Test API when page loads
+        console.log('Testing API connection...');
+        fetch('api-monitor.php?action=test')
+            .then(response => response.json())
+            .then(data => console.log('API test successful:', data))
+            .catch(error => console.log('API test failed:', error));
     </script>
 </body>
 </html>
